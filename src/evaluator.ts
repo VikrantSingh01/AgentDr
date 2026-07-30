@@ -142,6 +142,29 @@ export function evaluateRun(
       evidenceSequence: final?.sequence
     });
   }
+  if (
+    final &&
+    scenario.expect.outcome?.match !== undefined &&
+    !isSubset(scenario.expect.outcome.match, final.output)
+  ) {
+    findings.push({
+      id: "outcome.output_subset",
+      severity: "error",
+      message: "Final output did not contain the expected values",
+      evidenceSequence: final.sequence
+    });
+  }
+  if (final && scenario.expect.outcome?.schema) {
+    const validate = ajv.compile(scenario.expect.outcome.schema);
+    if (!validate(final.output)) {
+      findings.push({
+        id: "outcome.output_schema",
+        severity: "error",
+        message: "Final output failed JSON Schema validation",
+        evidenceSequence: final.sequence
+      });
+    }
+  }
 
   if (
     scenario.performance?.maxDurationMs !== undefined &&

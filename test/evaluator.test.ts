@@ -128,4 +128,48 @@ describe("evaluateRun", () => {
     expect(safetyFindings).toHaveLength(1);
     expect(safetyFindings[0].evidenceSequence).toBe(3);
   });
+
+  it("fails an evidence-inconsistent structured summary", () => {
+    const outcomeScenario: Scenario = {
+      ...scenario,
+      expect: {
+        outcome: {
+          status: "completed",
+          match: {
+            release: { risk: "at-risk", openBlockers: 1 }
+          },
+          schema: {
+            type: "object",
+            required: ["release"],
+            properties: {
+              release: {
+                type: "object",
+                required: ["risk", "openBlockers"]
+              }
+            }
+          }
+        }
+      }
+    };
+    const evidence: EvidenceEvent[] = [
+      {
+        type: "final",
+        status: "completed",
+        output: {
+          release: { risk: "ready", openBlockers: 0 }
+        },
+        sequence: 1,
+        timestamp: new Date().toISOString()
+      }
+    ];
+
+    const decision = evaluateRun(outcomeScenario, evidence, 10);
+    expect(decision.exitCode).toBe(1);
+    expect(decision.findings).toEqual([
+      expect.objectContaining({
+        id: "outcome.output_subset",
+        evidenceSequence: 1
+      })
+    ]);
+  });
 });

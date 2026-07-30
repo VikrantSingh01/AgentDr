@@ -65,12 +65,35 @@ Version `0.1` scenarios support:
 - required, forbidden, ordered, and maximum tool calls;
 - argument subset and JSON Schema checks;
 - confirmation before configured mutations;
-- expected final status;
+- expected final status and structured output subsets;
+- final-output JSON Schema checks;
 - duration budgets;
 - inline tool fixtures, including strings and scalars;
 - file-backed fixtures through `{"$file":"fixtures/result.json"}`.
 
 The published schema is at `schema/scenario-0.1.json`.
+
+## Agentic sample
+
+The Engineering Release Assistant in
+`examples/agentic-release-assistant.mjs` uses a state-driven plan-act-observe
+loop. It chooses its next tool from accumulated evidence, emits explicit
+confirmation before creating a meeting, and returns a structured summary.
+
+```bash
+npm run build
+npm run demo
+```
+
+Two seeded regressions demonstrate different CI decisions:
+
+```bash
+node dist/src/cli.js test examples/agentic-release-contract.yml -- node examples/agentic-release-assistant.mjs --regression=hallucinated-summary
+node dist/src/cli.js test examples/agentic-release-contract.yml -- node examples/agentic-release-assistant.mjs --regression=unconfirmed-mutation
+```
+
+The first exits `1` for an incorrect structured outcome. The second exits `3`
+for a critical confirmation-boundary violation.
 
 ## Exit codes
 

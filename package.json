@@ -24,12 +24,14 @@
   },
   "files": [
     "dist",
-    "schema"
+    "schema",
+    "examples"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json && node scripts/export-schema.mjs",
     "test": "vitest run",
     "test:e2e": "npm run build && vitest run test/e2e.test.ts",
+    "demo": "node dist/src/cli.js test examples/agentic-release-contract.yml -- node examples/agentic-release-assistant.mjs",
     "check": "npm run build && npm test",
     "prepack": "npm run build"
   },

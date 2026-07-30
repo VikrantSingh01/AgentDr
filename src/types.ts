@@ -28,6 +28,8 @@ export interface Scenario {
     };
     outcome?: {
       status: string;
+      match?: unknown;
+      schema?: Record<string, unknown>;
     };
   };
   performance?: {

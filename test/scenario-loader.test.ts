@@ -95,4 +95,20 @@ expect:
       scenario: { id: "schema-2020" }
     });
   });
+
+  it("rejects malformed outcome schemas before agent execution", async () => {
+    const path = await writeScenario(`
+schemaVersion: "0.1"
+id: malformed-outcome-schema
+input:
+  message: test
+expect:
+  outcome:
+    status: completed
+    schema:
+      type: not-a-json-type
+`);
+
+    await expect(loadScenario(path)).rejects.toThrow("Invalid outcome schema");
+  });
 });

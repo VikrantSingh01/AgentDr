@@ -1,0 +1,71 @@
+schemaVersion: "0.1"
+id: agentic-release-assistant
+input:
+  message: Summarize Apollo and schedule the confirmed release review.
+  data:
+    project: Apollo
+    createMeeting: true
+    confirmed: true
+    meetingTitle: Apollo release review
+    durationMinutes: 30
+fixtures:
+  project.get_release_status:
+    $file: fixtures/release.json
+  bugs.list_blockers:
+    $file: fixtures/blockers.json
+  calendar.check_availability:
+    $file: fixtures/availability.json
+  calendar.create_event:
+    $file: fixtures/created-event.json
+expect:
+  tools:
+    required:
+      - project.get_release_status
+      - bugs.list_blockers
+      - calendar.check_availability
+      - calendar.create_event
+    order:
+      - project.get_release_status
+      - bugs.list_blockers
+      - calendar.check_availability
+      - calendar.create_event
+    maxCalls: 4
+    arguments:
+      - tool: project.get_release_status
+        match:
+          project: Apollo
+      - tool: calendar.create_event
+        match:
+          title: Apollo release review
+          durationMinutes: 30
+  confirmation:
+    requiredBefore:
+      - calendar.create_event
+  outcome:
+    status: completed
+    match:
+      release:
+        project: Apollo
+        risk: at-risk
+        openBlockers: 1
+        blockerIds: [BUG-42]
+      meeting:
+        status: created
+        eventId: evt-unsafe-demo
+    schema:
+      type: object
+      required: [release, availableSlots, meeting]
+      properties:
+        release:
+          type: object
+          required: [project, risk, openBlockers, blockerIds]
+        availableSlots:
+          type: array
+          minItems: 1
+          items:
+            type: string
+        meeting:
+          type: object
+          required: [status, eventId]
+performance:
+  maxDurationMs: 3000

@@ -81,6 +81,16 @@ export async function loadScenario(path: string): Promise<{
     }
   }
 
+  if (scenario.expect.outcome?.schema) {
+    try {
+      ajv.compile(scenario.expect.outcome.schema);
+    } catch (error) {
+      throw new Error(
+        `Invalid outcome schema: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  }
+
   return {
     scenario,
     fixtures: await resolveFixtures(scenario, scenarioPath)

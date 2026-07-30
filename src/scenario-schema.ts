@@ -76,7 +76,9 @@ export const scenarioSchema = {
           additionalProperties: false,
           required: ["status"],
           properties: {
-            status: { type: "string", minLength: 1 }
+            status: { type: "string", minLength: 1 },
+            match: {},
+            schema: { type: "object" }
           }
         }
       }
