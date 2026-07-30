@@ -236,8 +236,8 @@ See the [fixture contract](examples/agentic-release-contract.yml),
 - one-use, tool-scoped or exact-argument-bound adapter-attested confirmation;
 - optional fail-closed pre-dispatch policy for harness-mediated calls;
 - ordered argument-aware and call-index-aware fixture responses;
-- semantic checks for contradictory policies, unreachable fixture cases, and
-  impossible call budgets;
+- semantic checks for contradictory policies, unreachable confirmation
+  enforcement, unreachable fixture cases, and impossible call budgets;
 - structured final outcomes;
 - exact MCP capability and tool-snapshot drift;
 - missing/duplicate tools, errors, timeouts, latency, and result-size budgets;
@@ -297,8 +297,8 @@ from untrusted sources only inside an appropriately isolated environment.
 - structural checks, not chain-of-thought inspection or automatic truth judging;
 - strict snapshot drift detection, not compatibility certification;
 - configured key-based redaction is not general DLP;
-- semantic linting covers core contradictions and fixture reachability, not
-  complete policy coverage;
+- semantic linting covers core contradictions, enforcement reachability, and
+  fixture reachability, not complete policy coverage;
 - no tamper-evident provenance, HTTP, Microsoft Agents 365, or External Agents
   adapter yet.
 

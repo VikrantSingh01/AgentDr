@@ -165,6 +165,47 @@ expect:
       );
   });
 
+  it("rejects confirmation policies made unreachable by forbidden enforcement", async () => {
+    const path = await writeScenario(`
+schemaVersion: "0.1"
+id: unreachable-confirmation
+input:
+  message: test
+enforcement:
+  preDispatch: true
+expect:
+  tools:
+    forbidden: [calendar.create_event]
+  confirmation:
+    requiredBefore: [calendar.create_event]
+    bindArguments: true
+`);
+
+    await expect(loadScenario(path)).rejects.toThrow(
+      "Confirmation policy is unreachable under pre-dispatch enforcement because every confirmation-protected tool is forbidden"
+    );
+  });
+
+  it("accepts a partially overlapping confirmation policy", async () => {
+    const path = await writeScenario(`
+schemaVersion: "0.1"
+id: partially-overlapping-confirmation
+input:
+  message: test
+enforcement:
+  preDispatch: true
+expect:
+  tools:
+    forbidden: [calendar.delete_event]
+  confirmation:
+    requiredBefore: [calendar.delete_event, calendar.create_event]
+`);
+
+    await expect(loadScenario(path)).resolves.toMatchObject({
+      scenario: { id: "partially-overlapping-confirmation" }
+    });
+  });
+
   it("rejects malformed argument schemas before agent execution", async () => {
     const path = await writeScenario(`
 schemaVersion: "0.1"

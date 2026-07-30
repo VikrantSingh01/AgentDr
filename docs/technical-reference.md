@@ -36,7 +36,8 @@ Current deterministic assertions include:
 - argument subset and JSON Schema validation;
 - one-use, tool-scoped or exact-argument-bound confirmation before protected calls;
 - optional pre-dispatch enforcement for forbidden and confirmation-protected calls;
-- semantic checks for core policy contradictions and fixture reachability;
+- semantic checks for core policy contradictions, enforcement reachability, and
+  fixture reachability;
 - final status, output subset, and output schema;
 - whole-run duration;
 - MCP capability and tool snapshot drift;

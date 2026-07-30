@@ -26,9 +26,5 @@ expect:
       - bugs.list_blockers
       - calendar.check_availability
     maxCalls: 4
-  confirmation:
-    requiredBefore:
-      - calendar.create_event
-    bindArguments: true
   outcome:
     status: completed

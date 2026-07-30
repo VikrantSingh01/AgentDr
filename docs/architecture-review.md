@@ -37,7 +37,7 @@ remain implementation work for any enforcement-grade mode.
 | High | The MCP flow is harness-proxied. | It validates the server and requested calls but not the child agent's own native MCP client implementation. | Demo wording corrected; native-client adapter needed for that claim. |
 | High | Safety contracts are opt-in. | Destructive tools or MCP annotations do not automatically require confirmation or prohibition. | Open product decision and policy-layer work. |
 | Medium | Snapshot checks classify exact normalized drift only. | A change is not automatically categorized as compatible, breaking, or certified safe. | Terminology corrected; compatibility analyzer is future work. |
-| Medium | Scenario semantics are not linted. | A schema-valid scenario may be vacuous, contradictory, or unable to exercise its assertions. | Semantic linting planned. |
+| Medium | Scenario semantic linting is incomplete. | Some schema-valid scenarios may still be vacuous or unable to exercise their assertions. | Core contradictions, impossible budgets, fixture reachability, and fully shadowed confirmation policies are linted; broader policy analysis remains planned. |
 | Medium | Reports lack tamper-evident provenance. | Evidence does not independently prove the scenario, executable, fixtures, or report were unchanged. | Manifest and signing design planned. |
 | Medium | Execution topology is narrow. | The MVP supports one child adapter, one stdio MCP server, and sequential calls. | Multi-server, parallel, streaming, and HTTP support planned. |
 | Medium | Key-based redaction is not DLP. | Unknown, encoded, positional, or free-text secrets can remain in reports. | Boundary documented; minimize and sanitize test data. |
@@ -113,9 +113,10 @@ until a Job Object or equivalent containment strategy is implemented.
 Derive an inventory of mutating or destructive tools from configured policy and
 MCP annotations, while requiring explicit review rather than assuming server
 metadata is authoritative. Core linting now detects required/forbidden conflicts, impossible call budgets,
-forbidden ordered calls, duplicate fixture selectors, and unreachable fixture
-cases. Continue with mutating-tool inventory, duplicate assertions, unprotected
-mutations, and fixture/result schema satisfiability.
+forbidden ordered calls, duplicate fixture selectors, unreachable fixture cases,
+and confirmation policies fully shadowed by forbidden-tool enforcement. Continue
+with mutating-tool inventory, duplicate assertions, unprotected mutations, and
+fixture/result schema satisfiability.
 
 ### 5. Add provenance and reproducibility manifests
 

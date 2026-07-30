@@ -58,6 +58,18 @@ export function lintScenario(
     errors.push("Argument binding requires at least one confirmation-protected tool");
   }
 
+  const confirmationProtected =
+    scenario.expect.confirmation?.requiredBefore ?? [];
+  if (
+    scenario.enforcement?.preDispatch &&
+    confirmationProtected.length > 0 &&
+    confirmationProtected.every((tool) => forbidden.has(tool))
+  ) {
+    errors.push(
+      "Confirmation policy is unreachable under pre-dispatch enforcement because every confirmation-protected tool is forbidden"
+    );
+  }
+
   for (const [tool, fixture] of Object.entries(fixtures)) {
     fixture.cases.forEach((fixtureCase, index) => {
       const duplicateIndex = fixture.cases

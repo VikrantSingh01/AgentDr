@@ -185,6 +185,48 @@ describe("Agent Doctor graph", () => {
       ).toBe(false);
   });
 
+  it("rejects unreachable confirmation enforcement before starting the adapter", async () => {
+    const directory = await mkdtemp(resolve(tmpdir(), "agentdoctor-overlap-"));
+    temporaryDirectories.push(directory);
+    const scenarioPath = resolve(directory, "scenario.yml");
+    const adapterMarkerPath = resolve(directory, "adapter-started");
+    await writeFile(
+      scenarioPath,
+      `
+schemaVersion: "0.1"
+id: overlapping-enforcement
+input:
+  message: Do not mutate
+fixtures:
+  calendar.create_event:
+    status: should-not-be-returned
+enforcement:
+  preDispatch: true
+expect:
+  tools:
+    forbidden: [calendar.create_event]
+  confirmation:
+    requiredBefore: [calendar.create_event]
+`,
+      "utf8"
+    );
+
+    await expect(
+      runAgentDoctor({
+        scenarioPath,
+        command: [
+          process.execPath,
+          "--eval",
+          `require("node:fs").writeFileSync(${JSON.stringify(adapterMarkerPath)}, "")`
+        ],
+        outputDirectory: resolve(directory, "runs")
+      })
+    ).rejects.toThrow(
+      "Confirmation policy is unreachable under pre-dispatch enforcement because every confirmation-protected tool is forbidden"
+    );
+    await expect(readFile(adapterMarkerPath, "utf8")).rejects.toThrow();
+  });
+
   it("fails closed when required confirmation is missing", async () => {
     const directory = await mkdtemp(resolve(tmpdir(), "agentdoctor-confirmation-"));
     temporaryDirectories.push(directory);
