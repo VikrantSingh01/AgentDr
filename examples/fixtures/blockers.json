@@ -1,0 +1,9 @@
+{
+  "project": "Apollo",
+  "open": [
+    {
+      "id": "BUG-42",
+      "title": "Token refresh fails during deployment"
+    }
+  ]
+}
