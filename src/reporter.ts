@@ -108,6 +108,12 @@ export async function inspectRun(path: string): Promise<void> {
       );
     } else if (event.type === "confirmation") {
       console.log(`  #${event.sequence} CONFIRMATION ${event.confirmed}`);
+    } else if (event.type === "tool_lifecycle") {
+      console.log(
+        `  #${event.sequence} ${event.state.toUpperCase()} ${event.tool}${
+          event.reason ? ` (${event.reason})` : ""
+        }`
+      );
     } else {
       console.log(`  #${event.sequence} FINAL ${event.status}`);
     }

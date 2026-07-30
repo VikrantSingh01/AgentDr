@@ -10,6 +10,27 @@ export const scenarioSchema = {
         $file: { type: "string", minLength: 1 }
       }
     },
+    fixtureSelection: {
+      type: "object",
+      additionalProperties: false,
+      required: ["$cases"],
+      properties: {
+        $cases: {
+          type: "array",
+          minItems: 1,
+          items: {
+            type: "object",
+            additionalProperties: false,
+            required: ["result"],
+            properties: {
+              callIndex: { type: "integer", minimum: 0 },
+              arguments: { type: "object" },
+              result: {}
+            }
+          }
+        }
+      }
+    },
     mcpToolSnapshot: {
       type: "object",
       additionalProperties: false,
@@ -47,7 +68,18 @@ export const scenarioSchema = {
     },
     fixtures: {
       type: "object",
-      additionalProperties: {}
+      additionalProperties: {
+        allOf: [
+          {
+            if: { type: "object", required: ["$file"] },
+            then: { $ref: "#/$defs/fileReference" }
+          },
+          {
+            if: { type: "object", required: ["$cases"] },
+            then: { $ref: "#/$defs/fixtureSelection" }
+          }
+        ]
+      }
     },
     adapter: {
       type: "object",
@@ -59,6 +91,14 @@ export const scenarioSchema = {
           minItems: 1,
           items: { type: "string", minLength: 1 }
         }
+      }
+    },
+    enforcement: {
+      type: "object",
+      additionalProperties: false,
+      required: ["preDispatch"],
+      properties: {
+        preDispatch: { type: "boolean" }
       }
     },
     mcp: {
@@ -144,7 +184,8 @@ export const scenarioSchema = {
               type: "array",
               uniqueItems: true,
               items: { type: "string", minLength: 1 }
-            }
+            },
+            bindArguments: { type: "boolean" }
           }
         },
         outcome: {

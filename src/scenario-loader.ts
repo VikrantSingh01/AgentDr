@@ -3,8 +3,14 @@ import { dirname, extname, resolve } from "node:path";
 import { Ajv2020 } from "ajv/dist/2020.js";
 import { parse } from "yaml";
 import { RESERVED_REDACTION_KEYS } from "./redaction.js";
+import { lintScenario } from "./scenario-linter.js";
 import { scenarioSchema } from "./scenario-schema.js";
-import type { McpToolSnapshot, Scenario } from "./types.js";
+import type {
+  FixtureCase,
+  McpToolSnapshot,
+  ResolvedFixtures,
+  Scenario
+} from "./types.js";
 
 const ajv = new Ajv2020({ allErrors: true, strict: false });
 const validateScenario = ajv.compile<Scenario>(scenarioSchema);
@@ -24,32 +30,60 @@ function parseDocument(path: string, content: string): unknown {
 async function resolveFixtures(
   scenario: Scenario,
   scenarioPath: string
-): Promise<Record<string, unknown>> {
-  const fixtures: Record<string, unknown> = {};
+): Promise<ResolvedFixtures> {
+  const fixtures: ResolvedFixtures = {};
 
-  for (const [tool, fixture] of Object.entries(scenario.fixtures ?? {})) {
+  const resolveResult = async (tool: string, value: unknown): Promise<unknown> => {
     if (
-      typeof fixture !== "object" ||
-      fixture === null ||
-      !("$file" in fixture) ||
-      typeof fixture.$file !== "string"
+      typeof value !== "object" ||
+      value === null ||
+      !("$file" in value) ||
+      typeof value.$file !== "string"
     ) {
-      fixtures[tool] = fixture;
-      continue;
+      return value;
     }
 
-    if (Object.keys(fixture).length !== 1) {
+    if (Object.keys(value).length !== 1) {
       throw new Error(`Fixture reference for ${tool} may only contain $file`);
     }
 
-    const fixturePath = resolve(dirname(scenarioPath), fixture.$file);
+    const fixturePath = resolve(dirname(scenarioPath), value.$file);
     let content: string;
     try {
       content = await readFile(fixturePath, "utf8");
     } catch {
       throw new Error(`Fixture for ${tool} was not found: ${fixturePath}`);
     }
-    fixtures[tool] = parseDocument(fixturePath, content);
+    return parseDocument(fixturePath, content);
+  };
+
+  for (const [tool, fixture] of Object.entries(scenario.fixtures ?? {})) {
+    if (
+      typeof fixture === "object" &&
+      fixture !== null &&
+      "$cases" in fixture &&
+      Array.isArray(fixture.$cases)
+    ) {
+      const cases: FixtureCase[] = [];
+      for (const fixtureCase of fixture.$cases) {
+        const candidate = fixtureCase as FixtureCase;
+        cases.push({
+          ...(candidate.callIndex !== undefined
+            ? { callIndex: candidate.callIndex }
+            : {}),
+          ...(candidate.arguments !== undefined
+            ? { arguments: candidate.arguments }
+            : {}),
+          result: await resolveResult(tool, candidate.result)
+        });
+      }
+      fixtures[tool] = { cases };
+      continue;
+    }
+
+    fixtures[tool] = {
+      cases: [{ result: await resolveResult(tool, fixture) }]
+    };
   }
 
   return fixtures;
@@ -82,6 +116,7 @@ async function resolveMcpToolSnapshot(
 export async function loadScenario(path: string): Promise<{
   scenario: Scenario;
   fixtures: Record<string, unknown>;
+  resolvedFixtures: ResolvedFixtures;
 }> {
   const scenarioPath = resolve(path);
   const document: unknown = parseDocument(
@@ -127,9 +162,24 @@ export async function loadScenario(path: string): Promise<{
     }
   }
   await resolveMcpToolSnapshot(scenario, scenarioPath);
+  const resolvedFixtures = await resolveFixtures(scenario, scenarioPath);
+  const lintErrors = lintScenario(scenario, resolvedFixtures);
+  if (lintErrors.length > 0) {
+    throw new Error(`Invalid scenario semantics: ${lintErrors.join("; ")}`);
+  }
 
   return {
     scenario,
-    fixtures: await resolveFixtures(scenario, scenarioPath)
+    fixtures: Object.fromEntries(
+      Object.entries(resolvedFixtures).map(([tool, fixture]) => [
+        tool,
+        fixture.cases.length === 1 &&
+        fixture.cases[0].callIndex === undefined &&
+        fixture.cases[0].arguments === undefined
+          ? fixture.cases[0].result
+          : fixture
+      ])
+    ),
+    resolvedFixtures
   };
 }

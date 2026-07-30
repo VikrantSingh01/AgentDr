@@ -28,6 +28,18 @@ export interface McpConfiguration {
   };
 }
 
+export interface FixtureCase {
+  callIndex?: number;
+  arguments?: Record<string, unknown>;
+  result: unknown;
+}
+
+export interface ResolvedFixture {
+  cases: FixtureCase[];
+}
+
+export type ResolvedFixtures = Record<string, ResolvedFixture>;
+
 export interface Scenario {
   schemaVersion: "0.1";
   id: string;
@@ -38,6 +50,9 @@ export interface Scenario {
   fixtures?: Record<string, unknown>;
   adapter?: {
     command: string[];
+  };
+  enforcement?: {
+    preDispatch: boolean;
   };
   mcp?: McpConfiguration;
   expect: {
@@ -54,6 +69,7 @@ export interface Scenario {
     };
     confirmation?: {
       requiredBefore: string[];
+      bindArguments?: boolean;
     };
     outcome?: {
       status: string;
@@ -104,6 +120,15 @@ export type EvidenceEvent =
       confirmed: boolean;
       tool: string;
       source?: string;
+      arguments?: Record<string, unknown>;
+    })
+  | (EvidenceBase & {
+      type: "tool_lifecycle";
+      callId: string;
+      tool: string;
+      state: "requested" | "authorized" | "denied" | "dispatched" | "completed";
+      mode: "observe" | "enforce";
+      reason?: "tool_forbidden" | "confirmation_missing_or_mismatched";
     })
   | (EvidenceBase & {
       type: "final";

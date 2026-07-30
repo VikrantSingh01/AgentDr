@@ -5,8 +5,10 @@ import type {
   EvidenceEvent,
   EvidenceEventInput,
   ExecutionResult,
+  ResolvedFixtures,
   Scenario
 } from "./types.js";
+import { isStructurallyEqual, isSubset } from "./value-match.js";
 
 const MAX_STDOUT_BYTES = 1024 * 1024;
 const MAX_STDERR_BYTES = 1024 * 1024;
@@ -91,7 +93,7 @@ export async function terminateChildProcess(child: ChildProcess): Promise<void> 
 
 interface AgentProcessOptions {
   scenario: Scenario;
-  fixtures: Record<string, unknown>;
+  fixtures: ResolvedFixtures;
   command: string[];
   cwd: string;
   toolBackend?: ToolBackend;
@@ -107,6 +109,13 @@ export class AgentExecutionError extends Error {
   }
 }
 
+export class AgentAuthorizationDeniedError extends AgentExecutionError {
+  constructor(message: string, execution: ExecutionResult) {
+    super(message, execution);
+    this.name = "AgentAuthorizationDeniedError";
+  }
+}
+
 type AgentOutput =
   | {
       type: "tool_call";
@@ -119,6 +128,7 @@ type AgentOutput =
       confirmed: boolean;
       tool: string;
       source?: string;
+      arguments?: Record<string, unknown>;
     }
   | {
       type: "final";
@@ -158,6 +168,11 @@ function parseAgentOutput(line: string): AgentOutput {
     typeof candidate.tool === "string" &&
     candidate.tool.length > 0 &&
     (candidate.source === undefined || typeof candidate.source === "string")
+    &&
+    (candidate.arguments === undefined ||
+      (typeof candidate.arguments === "object" &&
+        candidate.arguments !== null &&
+        !Array.isArray(candidate.arguments)))
   ) {
     return candidate as AgentOutput;
   }
@@ -237,6 +252,8 @@ export async function executeAgentProcess(
     let settled = false;
     let pendingToolCall: string | undefined;
     const callIds = new Set<string>();
+    const toolCallCounts = new Map<string, number>();
+    const consumedConfirmations = new Set<number>();
 
     const fail = (error: Error) => {
       if (settled) return;
@@ -244,7 +261,13 @@ export async function executeAgentProcess(
       clearTimeout(timeout);
       lines.close();
       void terminateChildProcess(child).finally(() => {
-        rejectPromise(new AgentExecutionError(sanitize(error.message), snapshot()));
+        const message = sanitize(error.message);
+        const execution = snapshot();
+        rejectPromise(
+          error instanceof AgentAuthorizationDeniedError
+            ? new AgentAuthorizationDeniedError(message, execution)
+            : new AgentExecutionError(message, execution)
+        );
       });
     };
 
@@ -286,10 +309,70 @@ export async function executeAgentProcess(
 
     const resolveToolCall = async (
       event: Extract<AgentOutput, { type: "tool_call" }>,
-      argumentsValue: Record<string, unknown>
+      argumentsValue: Record<string, unknown>,
+      callIndex: number
     ) => {
+      const mode = options.scenario.enforcement?.preDispatch ? "enforce" : "observe";
+      if (mode === "enforce") {
+        let denialReason:
+          | "tool_forbidden"
+          | "confirmation_missing_or_mismatched"
+          | undefined;
+        if (options.scenario.expect.tools?.forbidden?.includes(event.tool)) {
+          denialReason = "tool_forbidden";
+        } else if (
+          options.scenario.expect.confirmation?.requiredBefore.includes(event.tool)
+        ) {
+          const confirmation = [...evidence].reverse().find(
+            (
+              candidate
+            ): candidate is Extract<EvidenceEvent, { type: "confirmation" }> =>
+              candidate.type === "confirmation" &&
+              candidate.confirmed &&
+              candidate.tool === event.tool &&
+              !consumedConfirmations.has(candidate.sequence) &&
+              (!options.scenario.expect.confirmation?.bindArguments ||
+                (candidate.arguments !== undefined &&
+                  isStructurallyEqual(candidate.arguments, argumentsValue)))
+          );
+          if (confirmation) {
+            consumedConfirmations.add(confirmation.sequence);
+          } else {
+            denialReason = "confirmation_missing_or_mismatched";
+          }
+        }
+
+        if (denialReason) {
+          record({
+            type: "tool_lifecycle",
+            callId: event.callId,
+            tool: event.tool,
+            state: "denied",
+            mode,
+            reason: denialReason
+          });
+          throw new AgentAuthorizationDeniedError(
+            `Pre-dispatch authorization denied ${event.tool}: ${denialReason}`,
+            snapshot()
+          );
+        }
+        record({
+          type: "tool_lifecycle",
+          callId: event.callId,
+          tool: event.tool,
+          state: "authorized",
+          mode
+        });
+      }
       let result: unknown;
       if (options.toolBackend) {
+        record({
+          type: "tool_lifecycle",
+          callId: event.callId,
+          tool: event.tool,
+          state: "dispatched",
+          mode
+        });
         const resolution = await options.toolBackend.call(event.tool, argumentsValue);
         result = resolution.result;
         record({
@@ -306,7 +389,25 @@ export async function executeAgentProcess(
         if (!Object.hasOwn(options.fixtures, event.tool)) {
           throw new Error(`No fixture is configured for tool ${event.tool}`);
         }
-        result = options.fixtures[event.tool];
+        const fixtureCase = options.fixtures[event.tool].cases.find(
+          (candidate) =>
+            (candidate.callIndex === undefined || candidate.callIndex === callIndex) &&
+            (candidate.arguments === undefined ||
+              isSubset(candidate.arguments, argumentsValue))
+        );
+        if (!fixtureCase) {
+          throw new Error(
+            `No fixture case matched ${event.tool} call index ${callIndex} with arguments ${JSON.stringify(argumentsValue)}`
+          );
+        }
+        record({
+          type: "tool_lifecycle",
+          callId: event.callId,
+          tool: event.tool,
+          state: "dispatched",
+          mode
+        });
+        result = fixtureCase.result;
         record({
           type: "tool_result",
           callId: event.callId,
@@ -315,6 +416,13 @@ export async function executeAgentProcess(
           source: "fixture"
         });
       }
+      record({
+        type: "tool_lifecycle",
+        callId: event.callId,
+        tool: event.tool,
+        state: "completed",
+        mode
+      });
       child.stdin.write(
         `${JSON.stringify({
           type: "tool_result",
@@ -345,11 +453,20 @@ export async function executeAgentProcess(
         callIds.add(event.callId);
         pendingToolCall = event.callId;
         const argumentsValue = event.arguments ?? {};
+        const callIndex = toolCallCounts.get(event.tool) ?? 0;
+        toolCallCounts.set(event.tool, callIndex + 1);
         record({
           ...event,
           arguments: argumentsValue
         });
-        void resolveToolCall(event, argumentsValue).catch((error: unknown) => {
+        record({
+          type: "tool_lifecycle",
+          callId: event.callId,
+          tool: event.tool,
+          state: "requested",
+          mode: options.scenario.enforcement?.preDispatch ? "enforce" : "observe"
+        });
+        void resolveToolCall(event, argumentsValue, callIndex).catch((error: unknown) => {
           fail(error instanceof Error ? error : new Error(String(error)));
         });
         return;

@@ -1,6 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
-import { AgentExecutionError, executeAgentProcess } from "./agent-process.js";
+import {
+  AgentAuthorizationDeniedError,
+  AgentExecutionError,
+  executeAgentProcess
+} from "./agent-process.js";
 import {
   evaluateMcpEvidence,
   evaluateObservedPolicies,
@@ -17,6 +21,7 @@ import type {
   GraphNodeName,
   GraphTransition,
   RunReport,
+  ResolvedFixtures,
   Scenario
 } from "./types.js";
 
@@ -27,7 +32,7 @@ interface GraphState {
   requestedCommand: string[];
   requestedMcpCommand?: string[];
   scenario?: Scenario;
-  fixtures?: Record<string, unknown>;
+  fixtures?: ResolvedFixtures;
   command?: string[];
   execution?: ExecutionResult;
   decision?: Decision;
@@ -61,7 +66,7 @@ async function runNode(node: GraphNodeName, state: GraphState): Promise<void> {
   if (node === "load") {
     const loaded = await loadScenario(state.scenarioPath);
     state.scenario = loaded.scenario;
-    state.fixtures = loaded.fixtures;
+    state.fixtures = loaded.resolvedFixtures;
     state.command =
       state.requestedCommand.length > 0
         ? state.requestedCommand
@@ -182,25 +187,32 @@ export async function runAgentDoctor(options: RunOptions): Promise<CompletedRun>
             error.execution.evidence
           )
         ];
+        const authorizationDenied = error instanceof AgentAuthorizationDeniedError;
         state.decision = {
-          status: "runtime_failed",
-          exitCode: partialFindings.some((finding) => finding.severity === "critical")
+          status: authorizationDenied ? "failed" : "runtime_failed",
+          exitCode: authorizationDenied
             ? 3
-            : 2,
-          findings: [
-            ...partialFindings,
-            {
-              id: "runtime.execution",
-              severity: "error",
-              message: error.message,
-              ...(error.execution.evidence.length > 0
-                ? {
-                    evidenceSequence:
-                      error.execution.evidence[error.execution.evidence.length - 1].sequence
-                  }
-                : {})
-            }
-          ]
+            : partialFindings.some((finding) => finding.severity === "critical")
+              ? 3
+              : 2,
+          findings: authorizationDenied
+            ? partialFindings
+            : [
+                ...partialFindings,
+                {
+                  id: "runtime.execution",
+                  severity: "error",
+                  message: error.message,
+                  ...(error.execution.evidence.length > 0
+                    ? {
+                        evidenceSequence:
+                          error.execution.evidence[
+                            error.execution.evidence.length - 1
+                          ].sequence
+                      }
+                    : {})
+                }
+              ]
         };
         state.transitions.push({
           node: "report",
