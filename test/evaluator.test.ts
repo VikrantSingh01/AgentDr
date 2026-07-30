@@ -129,6 +129,104 @@ describe("evaluateRun", () => {
     expect(safetyFindings[0].evidenceSequence).toBe(3);
   });
 
+  it("requires confirmation arguments to match when binding is enabled", () => {
+    const boundScenario: Scenario = {
+      ...scenario,
+      expect: {
+        confirmation: {
+          requiredBefore: ["calendar.create_event"],
+          bindArguments: true
+        }
+      }
+    };
+    const evidence: EvidenceEvent[] = [
+      {
+        type: "confirmation",
+        confirmed: true,
+        tool: "calendar.create_event",
+        arguments: { title: "Approved" },
+        sequence: 1,
+        timestamp: new Date().toISOString()
+      },
+      {
+        type: "tool_call",
+        callId: "1",
+        tool: "calendar.create_event",
+        arguments: { title: "Changed" },
+        sequence: 2,
+        timestamp: new Date().toISOString()
+      }
+    ];
+
+    expect(evaluateRun(boundScenario, evidence, 10).findings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "safety.confirmation_required" })
+      ])
+    );
+  });
+
+  it("consumes batched confirmations consistently with pre-dispatch enforcement", () => {
+    const evidence: EvidenceEvent[] = [
+      {
+        type: "confirmation",
+        confirmed: true,
+        tool: "calendar.create_event",
+        sequence: 1,
+        timestamp: new Date().toISOString()
+      },
+      {
+        type: "confirmation",
+        confirmed: true,
+        tool: "calendar.create_event",
+        sequence: 2,
+        timestamp: new Date().toISOString()
+      },
+      {
+        type: "tool_call",
+        callId: "1",
+        tool: "calendar.create_event",
+        arguments: {},
+        sequence: 3,
+        timestamp: new Date().toISOString()
+      },
+      {
+        type: "tool_call",
+        callId: "2",
+        tool: "calendar.create_event",
+        arguments: {},
+        sequence: 4,
+        timestamp: new Date().toISOString()
+      }
+    ];
+    const confirmationScenario: Scenario = {
+      ...scenario,
+      expect: {
+        confirmation: { requiredBefore: ["calendar.create_event"] }
+      }
+    };
+
+    expect(evaluateRun(confirmationScenario, evidence, 10)).toMatchObject({
+      status: "passed",
+      exitCode: 0
+    });
+  });
+
+  it("reports every forbidden dispatch", () => {
+    const evidence: EvidenceEvent[] = [1, 2].map((sequence) => ({
+      type: "tool_call",
+      callId: String(sequence),
+      tool: "calendar.create_event",
+      arguments: {},
+      sequence,
+      timestamp: new Date().toISOString()
+    }));
+
+    const findings = evaluateRun(scenario, evidence, 10).findings.filter(
+      (finding) => finding.id === "tool.forbidden"
+    );
+    expect(findings.map((finding) => finding.evidenceSequence)).toEqual([1, 2]);
+  });
+
   it("fails an evidence-inconsistent structured summary", () => {
     const outcomeScenario: Scenario = {
       ...scenario,

@@ -6,7 +6,7 @@ import {
   terminateChildProcess
 } from "../src/agent-process.js";
 import type { ToolBackend } from "../src/tool-backend.js";
-import type { Scenario } from "../src/types.js";
+import type { ResolvedFixtures, Scenario } from "../src/types.js";
 
 const scenario: Scenario = {
   schemaVersion: "0.1",
@@ -17,11 +17,12 @@ const scenario: Scenario = {
 
 function execute(
   source: string,
-  fixtures: Record<string, unknown> = {},
-  toolBackend?: ToolBackend
+  fixtures: ResolvedFixtures = {},
+  toolBackend?: ToolBackend,
+  scenarioValue: Scenario = scenario
 ) {
   return executeAgentProcess({
-    scenario,
+    scenario: scenarioValue,
     fixtures,
     command: [process.execPath, "--input-type=module", "--eval", source],
     cwd: process.cwd(),
@@ -74,7 +75,9 @@ describe("child agent protocol", () => {
       }));
     `;
 
-    await expect(execute(source, { echo: true })).rejects.toThrow(
+    await expect(
+      execute(source, { echo: { cases: [{ result: true }] } })
+    ).rejects.toThrow(
       "Agent emitted an unsupported event"
     );
   });
@@ -94,9 +97,215 @@ describe("child agent protocol", () => {
       });
     `;
 
-    await expect(execute(source, { echo: true })).rejects.toThrow(
+    await expect(
+      execute(source, { echo: { cases: [{ result: true }] } })
+    ).rejects.toThrow(
       "Agent reused tool call ID: same"
     );
+  });
+
+  it("selects ordered fixture cases by per-tool call index and arguments", async () => {
+        const source = `
+          const input = await import("node:readline").then(({ createInterface }) =>
+            createInterface({ input: process.stdin })
+          );
+          input.on("line", (line) => {
+            const event = JSON.parse(line);
+            if (event.type === "run_start") {
+              console.log(JSON.stringify({
+                type: "tool_call", callId: "1", tool: "lookup", arguments: { id: "A" }
+              }));
+            } else if (event.type === "tool_result" && event.callId === "1") {
+              console.log(JSON.stringify({
+                type: "tool_call", callId: "2", tool: "lookup", arguments: { id: "A" }
+              }));
+            } else if (event.type === "tool_result" && event.callId === "2") {
+              console.log(JSON.stringify({ type: "final", status: "completed" }));
+            }
+          });
+        `;
+        const execution = await execute(source, {
+          lookup: {
+            cases: [
+              { callIndex: 0, arguments: { id: "A" }, result: { page: 1 } },
+              { callIndex: 1, arguments: { id: "A" }, result: { page: 2 } }
+            ]
+          }
+        });
+
+        expect(
+          execution.evidence
+            .filter((event) => event.type === "tool_result")
+            .map((event) => event.result)
+        ).toEqual([{ page: 1 }, { page: 2 }]);
+  });
+
+  it("fails when no argument-aware fixture case matches", async () => {
+        const source = `
+          console.log(JSON.stringify({
+            type: "tool_call", callId: "1", tool: "lookup", arguments: { id: "B" }
+          }));
+          setTimeout(() => {}, 1000);
+        `;
+
+        await expect(
+          execute(source, {
+            lookup: {
+              cases: [{ arguments: { id: "A" }, result: { found: true } }]
+            }
+          })
+        ).rejects.toThrow("No fixture case matched lookup call index 0");
+  });
+
+  it("enforces argument-bound confirmation before dispatch", async () => {
+        const protectedScenario: Scenario = {
+          ...scenario,
+          enforcement: { preDispatch: true },
+          expect: {
+            confirmation: {
+              requiredBefore: ["calendar.create_event"],
+              bindArguments: true
+            }
+          }
+        };
+        const source = `
+          const input = await import("node:readline").then(({ createInterface }) =>
+            createInterface({ input: process.stdin })
+          );
+          input.on("line", (line) => {
+            const event = JSON.parse(line);
+            if (event.type === "run_start") {
+              const argumentsValue = { title: "Approved", durationMinutes: 30 };
+              console.log(JSON.stringify({
+                type: "confirmation",
+                confirmed: true,
+                tool: "calendar.create_event",
+                arguments: argumentsValue
+              }));
+              console.log(JSON.stringify({
+                type: "tool_call",
+                callId: "1",
+                tool: "calendar.create_event",
+                arguments: argumentsValue
+              }));
+            } else if (event.type === "tool_result") {
+              console.log(JSON.stringify({ type: "final", status: "completed" }));
+            }
+          });
+        `;
+
+        const execution = await execute(
+          source,
+          {
+            "calendar.create_event": {
+              cases: [{ result: { status: "created" } }]
+            }
+          },
+          undefined,
+          protectedScenario
+        );
+
+        expect(execution.evidence).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ type: "tool_lifecycle", state: "authorized" }),
+            expect.objectContaining({ type: "tool_lifecycle", state: "dispatched" }),
+            expect.objectContaining({ type: "tool_lifecycle", state: "completed" })
+          ])
+        );
+  });
+
+  it("denies mismatched confirmation arguments before calling the backend", async () => {
+        let backendCalls = 0;
+        const backend: ToolBackend = {
+          async start() {
+            return [];
+          },
+          async call() {
+            backendCalls += 1;
+            return {
+              result: { status: "created" },
+              source: "mcp",
+              durationMs: 1,
+              resultBytes: 20
+            };
+          },
+          redact(value) {
+            return value;
+          },
+          async close() {}
+        };
+        const protectedScenario: Scenario = {
+          ...scenario,
+          enforcement: { preDispatch: true },
+          expect: {
+            confirmation: {
+              requiredBefore: ["calendar.create_event"],
+              bindArguments: true
+            }
+          }
+        };
+        const source = `
+          console.log(JSON.stringify({
+            type: "confirmation",
+            confirmed: true,
+            tool: "calendar.create_event",
+            arguments: { title: "Approved" }
+          }));
+          console.log(JSON.stringify({
+            type: "tool_call",
+            callId: "1",
+            tool: "calendar.create_event",
+            arguments: { title: "Changed" }
+          }));
+          setTimeout(() => {}, 1000);
+        `;
+
+        let execution;
+        try {
+          await execute(source, {}, backend, protectedScenario);
+        } catch (error) {
+          execution = (error as { execution?: { evidence: unknown[] } }).execution;
+        }
+
+        expect(backendCalls).toBe(0);
+        expect(execution?.evidence).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              type: "tool_lifecycle",
+              state: "denied",
+              reason: "confirmation_missing_or_mismatched"
+            })
+          ])
+        );
+  });
+
+  it("returns legacy fixture results that contain a cases property unchanged", async () => {
+    const source = `
+      const input = await import("node:readline").then(({ createInterface }) =>
+        createInterface({ input: process.stdin })
+      );
+      input.on("line", (line) => {
+        const event = JSON.parse(line);
+        if (event.type === "run_start") {
+          console.log(JSON.stringify({ type: "tool_call", callId: "1", tool: "lookup" }));
+        } else if (event.type === "tool_result") {
+          console.log(JSON.stringify({
+            type: "final",
+            status: "completed",
+            output: event.result
+          }));
+        }
+      });
+    `;
+    const resultWithCases = { cases: [{ id: "support-case-1" }] };
+
+    const execution = await execute(source, {
+      lookup: { cases: [{ result: resultWithCases }] }
+    });
+
+    expect(
+      execution.evidence.find((event) => event.type === "tool_result")
+    ).toMatchObject({ result: resultWithCases });
   });
 
   it("rejects a final event emitted before an asynchronous tool result", async () => {

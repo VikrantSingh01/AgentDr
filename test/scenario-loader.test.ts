@@ -55,6 +55,116 @@ expect: {}
     });
   });
 
+  it("loads ordered fixture cases with argument and call-index selectors", async () => {
+      const path = await writeScenario(`
+schemaVersion: "0.1"
+id: fixture-cases
+input:
+    message: test
+fixtures:
+    records.lookup:
+      $cases:
+        - callIndex: 0
+          arguments: { id: first }
+          result: { value: 1 }
+        - arguments: { id: second }
+          result:
+            $file: second.json
+expect: {}
+`);
+      await writeFile(resolve(path, "..", "second.json"), `{"value":2}`, "utf8");
+
+      await expect(loadScenario(path)).resolves.toMatchObject({
+        resolvedFixtures: {
+          "records.lookup": {
+            cases: [
+              { callIndex: 0, arguments: { id: "first" }, result: { value: 1 } },
+              { arguments: { id: "second" }, result: { value: 2 } }
+            ]
+          }
+        }
+      });
+  });
+
+  it("rejects unreachable fixture cases", async () => {
+      const path = await writeScenario(`
+schemaVersion: "0.1"
+id: unreachable-fixture
+input:
+    message: test
+fixtures:
+    echo:
+      $cases:
+        - result: fallback
+        - arguments: { value: later }
+          result: unreachable
+expect: {}
+`);
+
+      await expect(loadScenario(path)).rejects.toThrow(
+        "Fixture case 1 for echo is unreachable"
+      );
+  });
+
+  it("rejects structurally duplicate selectors regardless of key order", async () => {
+    const path = await writeScenario(`
+schemaVersion: "0.1"
+id: duplicate-fixture
+input:
+  message: test
+fixtures:
+  echo:
+    $cases:
+      - arguments: { project: Apollo, state: open }
+        result: first
+      - arguments: { state: open, project: Apollo }
+        result: duplicate
+expect: {}
+`);
+
+    await expect(loadScenario(path)).rejects.toThrow(
+      "duplicate selectors at cases 0 and 1"
+    );
+  });
+
+  it("rejects broader fixture cases that shadow later specific cases", async () => {
+    const path = await writeScenario(`
+schemaVersion: "0.1"
+id: shadowed-fixture
+input:
+  message: test
+fixtures:
+  echo:
+    $cases:
+      - arguments: { project: Apollo }
+        result: broad
+      - arguments: { project: Apollo, state: open }
+        result: shadowed
+expect: {}
+`);
+
+    await expect(loadScenario(path)).rejects.toThrow(
+      "Fixture case 1 for echo is unreachable because case 0 matches first"
+    );
+  });
+
+  it("rejects contradictory tool policies", async () => {
+      const path = await writeScenario(`
+schemaVersion: "0.1"
+id: contradictory
+input:
+    message: test
+expect:
+    tools:
+      required: [echo]
+      forbidden: [echo]
+`);
+
+      await expect(loadScenario(path)).rejects.toThrow(
+        "Tool echo cannot be both required and forbidden"
+      );
+  });
+
   it("rejects malformed argument schemas before agent execution", async () => {
     const path = await writeScenario(`
 schemaVersion: "0.1"

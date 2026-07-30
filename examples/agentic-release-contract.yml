@@ -14,7 +14,11 @@ fixtures:
   bugs.list_blockers:
     $file: fixtures/blockers.json
   calendar.check_availability:
-    $file: fixtures/availability.json
+    $cases:
+      - arguments:
+          durationMinutes: 30
+        result:
+          $file: fixtures/availability.json
   calendar.create_event:
     $file: fixtures/created-event.json
 expect:
