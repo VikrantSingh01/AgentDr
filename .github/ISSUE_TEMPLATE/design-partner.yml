@@ -1,5 +1,5 @@
-name: MCP design-partner pilot
-description: Propose a sanitized MCP workflow for a two-week Agent Doctor pilot.
+name: Agent action contract design-partner pilot
+description: Propose a sanitized fixture or MCP workflow for a two-week Agent Doctor pilot.
 title: "[Pilot]: "
 labels: ["design-partner"]
 body:
@@ -11,8 +11,8 @@ body:
   - type: textarea
     id: workflow
     attributes:
-      label: MCP workflow
-      description: What does the agent do, which tools can mutate state, and where does CI run?
+      label: Agent workflow
+      description: What does the agent do, which tools can mutate state, which backend does it use, and where does CI run?
     validations:
       required: true
   - type: textarea
@@ -37,6 +37,8 @@ body:
         - label: Tool discovery or schema drift
         - label: Wrong tool or arguments
         - label: Missing or repeated approval
+        - label: Forbidden or unconfirmed harness dispatch
+        - label: Repeated calls needing different fixture responses
         - label: Oversized or slow tool response
         - label: Unsupported final claim
         - label: MCP protocol or transport error
@@ -58,3 +60,8 @@ body:
           required: true
         - label: We can provide keep/remove feedback after two weeks.
           required: true
+  - type: textarea
+    id: commercial-path
+    attributes:
+      label: Commercial path
+      description: If the pilot succeeds, who is the buyer and what funded or dated purchasing step could follow?

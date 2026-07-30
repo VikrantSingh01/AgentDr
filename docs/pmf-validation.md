@@ -1,103 +1,250 @@
-# MCP Wedge PMF Validation
+# Agent Action Contract PMF Validation
 
 ## Current Evidence
 
-Agent Doctor has technical feasibility evidence, not product-market fit. The
-real MCP demo proves that one local contract can observe discovery, tool calls,
-mutating-tool requests and reported results, latency, response size, schema
-drift, errors, and redaction. PMF requires external teams to retain the check in
-normal pull-request work.
+Agent Doctor has technical feasibility evidence, not product-market fit.
+
+The current release proves that one local contract can:
+
+- replay repeated tool calls with argument-aware and call-index-aware fixtures;
+- exercise a real MCP stdio server through the official TypeScript SDK v2;
+- check tools, arguments, order, outcomes, confirmation, latency, response size,
+  errors, and exact MCP capability or tool-snapshot drift;
+- reject contradictory policies and unreachable fixture cases before execution;
+- record requested, authorized, denied, dispatched, and completed lifecycle
+  evidence;
+- deny configured forbidden or unconfirmed fixture and MCP calls before harness
+  dispatch;
+- preserve partial evidence and return stable CI exit codes;
+- sanitize configured sensitive values before report persistence.
+
+The repository currently passes 81 deterministic tests across 13 files and eight
+live MCP cases. Those results prove implementation quality. They do not prove
+that external teams have a recurring problem, can onboard independently, will
+retain scenarios, or will pay.
 
 ## Beachhead Hypothesis
 
-The first high-intent user is a TypeScript team shipping an MCP-connected agent
-that can mutate calendars, repositories, tickets, cloud resources, or business
-records. The team already uses GitHub pull requests and has experienced a tool
-selection, argument, confirmation, or schema regression.
+The strongest initial user is a platform or product team shipping an agent that
+retrieves organizational data and then performs a consequential, structured
+action. Initial categories are:
+
+1. Action Closure agents that create tasks, tickets, reminders, or follow-up
+   records.
+2. Meeting Facilitator agents that turn discussion into approved actions.
+3. Engineering Delivery agents that inspect release state and mutate delivery
+   systems.
+4. Teams Project agents that coordinate work across calendars, tasks, issues,
+   and project records.
+
+The team already uses pull requests, owns the agent quality gate, and has
+experienced at least one failure involving tool selection, arguments, approval,
+workflow order, or MCP contract drift.
 
 The narrow promise is:
 
-> Record the expected MCP action contract once, then detect unsafe tool behavior
-> and protocol regressions, fail CI, and preserve evidence for local diagnosis.
+> Express the expected action workflow once, replay or exercise it in CI, deny
+> configured forbidden or unconfirmed calls at the harness boundary, and
+> preserve ordered evidence that explains the decision.
+
+This promise is intentionally narrower than complete agent safety, production
+observability, or sandboxing.
+
+## Why The Wedge Changed
+
+The original wedge focused on MCP schema and tool-call regression testing. That
+remains useful, but the delivered implementation now supports a stronger action
+contract:
+
+| Earlier capability | Current capability | PMF implication |
+|---|---|---|
+| One fixture result per tool | Ordered cases selected by arguments and call index | Real repeated-call workflows can be represented without custom fixture-selection logic |
+| Post-run confirmation finding | Optional exact argument binding and pre-dispatch denial | Teams can test both detection and bounded prevention |
+| Tool call plus result evidence | Explicit request-to-completion lifecycle | Reviewers can distinguish attempted, denied, and dispatched actions |
+| Schema validation only | Core semantic linting | Contradictory or unreachable scenarios fail before consuming CI time |
+| MCP-focused positioning | Fixture and MCP paths share one evaluator and report | Teams can adopt cheaply, then add real transport coverage |
+
+The PMF question is no longer only whether teams want MCP conformance checks. It
+is whether they will maintain deterministic action contracts as normal release
+infrastructure.
 
 ## Alternatives To Beat
 
 - framework-specific trace inspection;
-- hand-written integration tests;
+- hand-written integration tests around each agent;
 - prompt snapshots and exact-text assertions;
 - hosted evaluation suites that require trace upload;
-- manually running MCP Inspector after changes.
+- manually running MCP Inspector after changes;
+- approval logic embedded only in prompts or application conditionals;
+- production monitoring that finds the failure after deployment.
 
-Agent Doctor must be materially faster to author and diagnose than those
-alternatives. Portability alone is not sufficient value.
+Agent Doctor must be materially faster to author, review, and diagnose than
+these alternatives. Portability and deterministic output are not sufficient if
+scenario maintenance is expensive.
 
-## Public Problem Signals
+## Product Boundaries To Test In Interviews
 
-These issues support the problem hypothesis but do not prove willingness to pay:
+These boundaries may be acceptable, or they may block adoption:
 
-- [apiome #4532](https://github.com/apiome/apiome/issues/4532) requests a
-	versioned MCP tool-schema regression corpus, deterministic golden generation,
-	schema-validity checks, and CI failure on drift. This directly supports the
-	snapshot and reviewable-diff wedge.
-- [Claude Code #79983](https://github.com/anthropics/claude-code/issues/79983)
-	reports a mutating Gmail tool remaining blocked after repeated approval, with
-	manual email creation as the workaround. This supports explicit,
-	evidence-backed confirmation contracts.
-- [microsoft/mcp #2755](https://github.com/microsoft/mcp/issues/2755) describes
-	expensive live-test setup and test output that is too noisy to diagnose. This
-	supports scoped scenarios and concise evidence locations rather than large
-	undifferentiated JSON logs.
-- [ContextForge reverse proxy #2](https://github.com/contextforge-org/mcp-reverse-proxy/issues/2)
-	proposes a companion MCP server and integration CI because unit tests do not
-	exercise the proxy end to end. This supports shipping reusable conformance
-	servers and scenarios.
+- the child adapter must speak the JSONL protocol;
+- observation is cooperative, so out-of-band filesystem, network, subprocess,
+  native MCP, and other child activity is neither comprehensively observed nor
+  controlled;
+- enforcement controls only calls routed through the harness;
+- confirmation events are adapter-attested and can carry exact arguments, but
+  authenticated identity, tenant, issuance, and expiry are not represented or
+  verified;
+- MCP calls are made by the harness proxy and do not test the child agent's
+  native MCP client implementation;
+- scenarios and their commands are trusted local code;
+- the current topology is one adapter, one MCP server, and sequential calls;
+- retrieval grounding, citations, multi-turn sessions, HTTP, concurrency, and
+  production trace ingestion are not implemented;
+- configured key-based redaction is not general data-loss prevention.
 
-The recurring job is narrower than "agent observability": make MCP contract
-changes and approval failures reproducible, reviewable, and actionable in CI.
-Interviews must still establish frequency, ownership, retention, and budget.
+Do not hide these constraints during discovery. Measure which ones prevent a
+real pilot from starting or remaining in CI.
 
 ## Problem Interview
 
 Ask about the last incident, not desired features:
 
-1. What agent or MCP change caused the last pre-release or production failure?
-2. Which tool was called, with what arguments, and what should have happened?
-3. How was the failure discovered and reproduced?
-4. How long did diagnosis take, and who participated?
-5. What test existed before the incident? Why did it miss the failure?
-6. Would a deterministic PR check have blocked a legitimate change?
-7. What data may not leave the developer machine or CI runner?
-8. Who owns the quality gate and who can approve a blocking policy?
+1. What agent change caused the last pre-release or production failure?
+2. Which action was requested, with what arguments, and what should have
+   happened?
+3. Was the action read-only, mutating, or destructive?
+4. How was approval represented, and what exactly did it authorize?
+5. How was the failure discovered and reproduced?
+6. How long did diagnosis take, and who participated?
+7. What test existed before the incident? Why did it miss the failure?
+8. Would a deterministic pull-request check have blocked a legitimate change?
+9. Which test data and traces may not leave the developer machine or CI runner?
+10. Who owns the quality gate, and who can approve a blocking policy?
+11. Does the workflow repeat a tool with different arguments or use data from
+    one tool in another?
+12. What would make the team remove the check after two weeks?
 
-Do not demo Agent Doctor until the incident timeline and current workaround are
-understood.
+Do not demo Agent Doctor until the incident timeline, current workaround,
+frequency, and owner are understood.
 
-## Two-Week Pilot
+## Pilot Design
 
-1. Select one mutating MCP workflow and one recent real failure.
-2. Measure current scenario-authoring and diagnosis time.
-3. Add Agent Doctor as a non-blocking PR check for ten pull requests.
-4. Seed one known regression; record false positives and unsupported evidence.
-5. Let the partner maintain the scenario without project-team edits.
-6. Ask the team to keep, remove, or pay for the check at pilot end.
+### Phase 1: Represent A Real Failure
+
+1. Select one consequential workflow and one recent sanitized failure.
+2. Record current reproduction and diagnosis time.
+3. Build the thinnest JSONL adapter around existing framework callbacks.
+4. Express the workflow with fixtures first.
+5. Record unsupported requirements rather than extending the product during
+   onboarding.
+
+Exit criterion: the real failure is represented without a framework fork or a
+model judge.
+
+### Phase 2: Run In Observe Mode
+
+1. Add a non-blocking pull-request check for ten pull requests.
+2. Seed one known tool, argument, confirmation, or ordering regression.
+3. Measure runtime, false findings, authoring effort, and diagnosis time.
+4. Ask a partner engineer to maintain the scenario without project-team edits.
+5. Exercise a real MCP server when the partner owns one.
+
+Exit criterion: the team trusts the evidence enough to use it during review.
+
+### Phase 3: Enable Selective Enforcement
+
+1. Select one forbidden or confirmation-protected harness-mediated call.
+2. Enable `enforcement.preDispatch`.
+3. Verify that denial produces requested and denied evidence without dispatch,
+   result, or completion.
+4. Run argument-change, missing-confirmation, repeated-confirmation, and backend
+   failure cases.
+5. Document every action path that can bypass the harness.
+
+Exit criterion: the team accepts the bounded enforcement claim and keeps the
+gate enabled.
+
+### Phase 4: Test Retention And Commercial Intent
+
+1. Leave scenario ownership with the partner for the two-week pilot.
+2. Ask the team to keep, remove, or expand the check.
+3. Record maintenance time and every false block.
+4. Ask which missing integration would unlock broader deployment.
+5. Identify the budget owner and purchasing path.
+
+Exit criterion: retained use plus explicit commercial intent.
 
 ## Scorecard
 
 | Signal | Continue threshold |
 |---|---:|
-| Problem interviews | 6 of 10 report recurring pre-release action failures |
+| Problem interviews | 6 of 10 report at least two relevant failures in the previous six months |
+| Beachhead concentration | 4 of those 6 fit Action Closure, Facilitator, Engineering Delivery, or Teams Project workflows |
 | Scenario expressiveness | 4 real failures represented without framework forks |
-| Initial authoring | Median under 15 minutes |
-| Independent onboarding | End-to-end under 30 minutes |
-| Pilot precision | No critical false block across 10 PRs |
+| Initial authoring | Median under 30 minutes, including the adapter |
+| Additional scenario authoring | Median under 15 minutes |
+| Independent onboarding | End-to-end under 60 minutes without project-team edits |
+| Pull-request retention | 2 teams keep checks after the two-week pilot |
+| Pilot precision | No critical false block across at least 20 pull requests and 50 protected or policy-relevant requests |
+| Diagnosis value | Median time to identify the failing event under 10 minutes across at least 4 seeded or real failures |
 | Unseeded value | At least one meaningful real regression caught |
-| Retention | 2 teams keep the check after the pilot |
-| Commercial intent | 1 team names budget or signs a paid-design-partner letter |
+| Enforcement adoption | 1 team keeps a bounded pre-dispatch policy enabled |
+| Maintenance | Median partner-owned scenario update under 15 minutes, with no update over 60 minutes |
+| Commercial intent | Within 30 days after the pilot, 1 buyer confirms funding and a dated purchasing step, or signs a paid design-partner agreement |
+
+A critical false block is a critical finding that both the partner workflow
+owner and Agent Doctor reviewer agree rejected compliant intended behavior.
+Disagreements remain unresolved findings and must be reported separately. Pilot
+precision must include the total number of pull requests, tool requests,
+protected requests, policy-relevant requests, denials, and adjudicated false
+blocks.
+
+## Evidence To Capture
+
+For every pilot, record:
+
+- agent category, framework, backend, and workflow type;
+- prior incident and current workaround;
+- adapter and first-scenario authoring time;
+- number of scenario changes per pull request;
+- seeded and unseeded findings;
+- false blocks, adjudication outcomes, disagreements, and ignored findings;
+- total tool, protected, policy-relevant, denied, and dispatched requests;
+- diagnosis time before and after Agent Doctor;
+- unsupported assertions or topology requirements;
+- observe-mode and enforcement-mode usage;
+- whether the partner independently changed the contract;
+- retention decision and reason;
+- buyer-confirmed funding, dated purchasing step, or paid agreement.
+
+Use sanitized data. Do not upload partner reports without explicit approval.
+
+## Highest-Value Discovery Questions
+
+The next design-partner conversations should determine:
+
+1. Is the strongest pain approval-bound mutation, MCP drift, or workflow
+   regression?
+2. Is the JSONL adapter cost acceptable, or is a native Microsoft Agents SDK,
+   WorkIQ, or framework adapter required before evaluation?
+3. Do teams need cross-tool data references before repeated-call fixtures are
+   useful?
+4. Which identity and approval properties must be independently verified?
+5. Does the buyer sit in the agent product team, platform engineering,
+   developer experience, security, or compliance?
+6. Will teams accept a local JSON report, or do they require JUnit, SARIF, HTML,
+   or hosted trend reporting?
 
 ## Decision
 
-- **Proceed:** retention plus an unseeded catch, with acceptable maintenance.
-- **Revise:** pain is real but scenarios are too expensive or evidence is weak.
-- **Stop:** teams prefer existing tests and remove the check after the demo.
+- **Proceed:** every scorecard threshold is met, including buyer-confirmed
+  commercial intent within 30 days.
+- **Revise:** pain and retention are real, but adapter cost, expressiveness, or
+  evidence quality prevents broader adoption.
+- **Narrow:** one agent category retains the product while others require
+  different semantics or integrations.
+- **Stop:** teams prefer existing tests, remove the check after the pilot, or
+  cannot identify an owner for the gate.
 
-No download, star, seeded test, or internal benchmark should be reported as PMF.
+No download, star, seeded test, internal benchmark, test count, or enforcement
+demo should be reported as product-market fit.
