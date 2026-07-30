@@ -1,0 +1,60 @@
+name: MCP design-partner pilot
+description: Propose a sanitized MCP workflow for a two-week Agent Doctor pilot.
+title: "[Pilot]: "
+labels: ["design-partner"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not include credentials, private prompts, customer data, or production traces.
+        Describe the last real failure and current testing workflow using sanitized details.
+  - type: textarea
+    id: workflow
+    attributes:
+      label: MCP workflow
+      description: What does the agent do, which tools can mutate state, and where does CI run?
+    validations:
+      required: true
+  - type: textarea
+    id: incident
+    attributes:
+      label: Last real failure
+      description: What changed, what incorrect action occurred, and how was it discovered?
+    validations:
+      required: true
+  - type: textarea
+    id: workaround
+    attributes:
+      label: Current test and diagnosis process
+      description: Include approximate authoring, reproduction, and diagnosis time.
+    validations:
+      required: true
+  - type: checkboxes
+    id: failure-types
+    attributes:
+      label: Relevant contract failures
+      options:
+        - label: Tool discovery or schema drift
+        - label: Wrong tool or arguments
+        - label: Missing or repeated approval
+        - label: Oversized or slow tool response
+        - label: Unsupported final claim
+        - label: MCP protocol or transport error
+  - type: textarea
+    id: privacy
+    attributes:
+      label: Privacy and retention constraints
+      description: What evidence must be redacted, remain local, or be deleted after CI?
+    validations:
+      required: true
+  - type: checkboxes
+    id: commitment
+    attributes:
+      label: Pilot commitment
+      options:
+        - label: We can run a non-blocking check for at least ten pull requests.
+          required: true
+        - label: A developer outside the Agent Doctor team can author or maintain the scenario.
+          required: true
+        - label: We can provide keep/remove feedback after two weeks.
+          required: true

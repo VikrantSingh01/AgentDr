@@ -51,4 +51,38 @@ describe("CLI release surface", () => {
       "Invalid Agent Doctor report"
     );
   });
+
+  it("inspects a real MCP stdio server", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+
+    await expect(
+      runCli([
+        "mcp",
+        "inspect",
+        "--",
+        process.execPath,
+        resolve("examples/mcp-release-server.mjs")
+      ])
+    ).resolves.toBe(0);
+    expect(log.mock.calls.flat().join("\n")).toContain("project.get_release_status");
+  });
+
+  it("writes a reusable MCP tool snapshot", async () => {
+    const directory = await mkdtemp(resolve(tmpdir(), "agentdoctor-mcp-cli-"));
+    temporaryDirectories.push(directory);
+    const path = resolve(directory, "nested", "tools.json");
+
+    await expect(
+      runCli([
+        "mcp",
+        "snapshot",
+        path,
+        "--",
+        process.execPath,
+        resolve("examples/mcp-release-server.mjs")
+      ])
+    ).resolves.toBe(0);
+    const tools = JSON.parse(await readFile(path, "utf8")) as Array<{ name: string }>;
+    expect(tools.map((tool) => tool.name)).toContain("calendar.create_event");
+  });
 });

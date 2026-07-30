@@ -1,0 +1,21 @@
+$ node dist/src/cli.js test examples/mcp-release-contract.yml
+PASS mcp-release-assistant (463ms)
+Evidence: .\.agentdoctor\runs\mcp-release-assistant-2026-07-30T11-51-33-071Z.json
+
+$ node node_modules/vitest/vitest.mjs run test/mcp-e2e.test.ts --reporter=verbose
+
+ RUN  v4.1.10 .
+
+ ✓ test/mcp-e2e.test.ts > real MCP stdio conformance > replays the same agent workflow with deterministic fixtures 600ms
+ ✓ test/mcp-e2e.test.ts > real MCP stdio conformance > discovers and calls a real MCP server with redacted evidence 431ms
+ ✓ test/mcp-e2e.test.ts > real MCP stdio conformance > redacts secrets echoed into final output and agent stderr 408ms
+ ✓ test/mcp-e2e.test.ts > real MCP stdio conformance > detects MCP input schema drift 422ms
+ ✓ test/mcp-e2e.test.ts > real MCP stdio conformance > detects oversized MCP responses 414ms
+ ✓ test/mcp-e2e.test.ts > real MCP stdio conformance > detects MCP tool latency regressions 580ms
+ ✓ test/mcp-e2e.test.ts > real MCP stdio conformance > preserves MCP tool-error evidence when the agent fails 422ms
+ ✓ test/mcp-e2e.test.ts > real MCP stdio conformance > preserves discovery and call evidence for MCP protocol failures 431ms
+
+ Test Files  1 passed (1)
+      Tests  8 passed (8)
+   Start at  04:51:34
+   Duration  4.61s (transform 144ms, setup 0ms, import 640ms, tests 3.71s, environment 0ms)

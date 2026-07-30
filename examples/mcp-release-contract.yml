@@ -1,0 +1,63 @@
+schemaVersion: "0.1"
+id: mcp-release-assistant
+input:
+  message: Summarize Apollo and schedule the confirmed release review through MCP.
+  data:
+    project: Apollo
+    createMeeting: true
+    confirmed: true
+    meetingTitle: Apollo release review
+    durationMinutes: 30
+adapter:
+  command: [node, examples/agentic-release-assistant.mjs]
+mcp:
+  server:
+    command: [node, examples/mcp-release-server.mjs]
+  capabilitySnapshot:
+    tools:
+      listChanged: true
+  toolSnapshot:
+    $file: fixtures/mcp-release-tools.snapshot.json
+  startupTimeoutMs: 3000
+  requestTimeoutMs: 1000
+  maxResponseBytes: 2500
+  maxToolDurationMs: 100
+  redaction:
+    keys: [accessToken, ownerEmail]
+expect:
+  tools:
+    required:
+      - project.get_release_status
+      - bugs.list_blockers
+      - calendar.check_availability
+      - calendar.create_event
+    order:
+      - project.get_release_status
+      - bugs.list_blockers
+      - calendar.check_availability
+      - calendar.create_event
+    maxCalls: 4
+    arguments:
+      - tool: project.get_release_status
+        match:
+          project: Apollo
+      - tool: calendar.create_event
+        match:
+          title: Apollo release review
+          durationMinutes: 30
+  confirmation:
+    requiredBefore:
+      - calendar.create_event
+  outcome:
+    status: completed
+    match:
+      release:
+        project: Apollo
+        risk: at-risk
+        openBlockers: 1
+        blockerIds: [BUG-42]
+      meeting:
+        status: created
+        eventId: evt-mcp-demo
+performance:
+  maxDurationMs: 5000

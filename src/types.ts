@@ -1,5 +1,33 @@
 export type Severity = "error" | "critical";
 
+export interface McpToolSnapshot {
+  name: string;
+  title?: string;
+  description?: string;
+  icons?: Array<Record<string, unknown>>;
+  inputSchema?: Record<string, unknown>;
+  outputSchema?: Record<string, unknown>;
+  annotations?: Record<string, unknown>;
+  execution?: Record<string, unknown>;
+  _meta?: Record<string, unknown>;
+}
+
+export interface McpConfiguration {
+  server: {
+    command: string[];
+  };
+  capabilitySnapshot?: Record<string, unknown>;
+  toolSnapshot?: McpToolSnapshot[] | { $file: string };
+  startupTimeoutMs?: number;
+  requestTimeoutMs?: number;
+  maxResponseBytes?: number;
+  maxToolDurationMs?: number;
+  redaction?: {
+    keys: string[];
+    replacement?: string;
+  };
+}
+
 export interface Scenario {
   schemaVersion: "0.1";
   id: string;
@@ -11,6 +39,7 @@ export interface Scenario {
   adapter?: {
     command: string[];
   };
+  mcp?: McpConfiguration;
   expect: {
     tools?: {
       required?: string[];
@@ -37,12 +66,23 @@ export interface Scenario {
   };
 }
 
-interface EvidenceBase {
+export interface EvidenceBase {
   sequence: number;
   timestamp: string;
 }
 
 export type EvidenceEvent =
+  | (EvidenceBase & {
+      type: "mcp_discovery";
+      serverCommand: string[];
+      serverInfo?: { name: string; version: string };
+      capabilities: Record<string, unknown>;
+      tools: McpToolSnapshot[];
+      capabilitySnapshotMatches?: boolean;
+      toolSnapshotMatches?: boolean;
+      driftedTools?: string[];
+      durationMs: number;
+    })
   | (EvidenceBase & {
       type: "tool_call";
       callId: string;
@@ -54,6 +94,10 @@ export type EvidenceEvent =
       callId: string;
       tool: string;
       result: unknown;
+      source?: "fixture" | "mcp";
+      durationMs?: number;
+      resultBytes?: number;
+      isError?: boolean;
     })
   | (EvidenceBase & {
       type: "confirmation";
@@ -66,6 +110,12 @@ export type EvidenceEvent =
       status: string;
       output?: unknown;
     });
+
+export type EvidenceEventInput = EvidenceEvent extends infer Event
+  ? Event extends EvidenceBase
+    ? Omit<Event, keyof EvidenceBase>
+    : never
+  : never;
 
 export interface ExecutionResult {
   command: string[];

@@ -1,5 +1,11 @@
+import { spawn } from "node:child_process";
+import { once } from "node:events";
 import { describe, expect, it } from "vitest";
-import { executeAgentProcess } from "../src/agent-process.js";
+import {
+  executeAgentProcess,
+  terminateChildProcess
+} from "../src/agent-process.js";
+import type { ToolBackend } from "../src/tool-backend.js";
 import type { Scenario } from "../src/types.js";
 
 const scenario: Scenario = {
@@ -9,12 +15,17 @@ const scenario: Scenario = {
   expect: {}
 };
 
-function execute(source: string, fixtures: Record<string, unknown> = {}) {
+function execute(
+  source: string,
+  fixtures: Record<string, unknown> = {},
+  toolBackend?: ToolBackend
+) {
   return executeAgentProcess({
     scenario,
     fixtures,
     command: [process.execPath, "--input-type=module", "--eval", source],
-    cwd: process.cwd()
+    cwd: process.cwd(),
+    toolBackend
   });
 }
 
@@ -85,6 +96,93 @@ describe("child agent protocol", () => {
 
     await expect(execute(source, { echo: true })).rejects.toThrow(
       "Agent reused tool call ID: same"
+    );
+  });
+
+  it("rejects a final event emitted before an asynchronous tool result", async () => {
+    const backend: ToolBackend = {
+      async start() {
+        return [];
+      },
+      async call() {
+        await new Promise((resolvePromise) => setTimeout(resolvePromise, 50));
+        return {
+          result: { value: 42 },
+          source: "mcp",
+          durationMs: 50,
+          resultBytes: 12
+        };
+      },
+      redact(value) {
+        return value;
+      },
+      async close() {}
+    };
+    const source = `
+      console.log(JSON.stringify({ type: "tool_call", callId: "pending", tool: "echo" }));
+      console.log(JSON.stringify({ type: "final", status: "completed" }));
+    `;
+
+    await expect(execute(source, {}, backend)).rejects.toThrow(
+      "Agent emitted final before observing tool result for pending"
+    );
+  });
+
+  it("force-terminates a child that ignores graceful shutdown", async () => {
+    const child = spawn(
+      process.execPath,
+      [
+        "--input-type=module",
+        "--eval",
+        "process.on('SIGTERM', () => {}); setInterval(() => {}, 1000)"
+      ],
+      {
+        detached: process.platform !== "win32",
+        stdio: "ignore",
+        windowsHide: true
+      }
+    );
+    await once(child, "spawn");
+    const startedAt = Date.now();
+
+    await terminateChildProcess(child);
+
+    expect(child.exitCode !== null || child.signalCode !== null).toBe(true);
+    expect(Date.now() - startedAt).toBeLessThan(2000);
+  });
+
+  it("force-terminates POSIX descendants after the group leader exits", async () => {
+    if (process.platform === "win32") return;
+    const leaderSource = `
+      const { spawn } = await import("node:child_process");
+      const descendant = spawn(process.execPath, [
+        "--input-type=module",
+        "--eval",
+        "process.on('SIGTERM', () => {}); setInterval(() => {}, 1000)"
+      ], { stdio: "ignore" });
+      console.log(descendant.pid);
+      process.on("SIGTERM", () => process.exit(0));
+      setInterval(() => {}, 1000);
+    `;
+    const leader = spawn(
+      process.execPath,
+      ["--input-type=module", "--eval", leaderSource],
+      {
+        detached: true,
+        stdio: ["ignore", "pipe", "ignore"]
+      }
+    );
+    const descendantPid = await new Promise<number>((resolvePromise, rejectPromise) => {
+      leader.once("error", rejectPromise);
+      leader.stdout!.once("data", (chunk: Buffer) => {
+        resolvePromise(Number.parseInt(chunk.toString("utf8").trim(), 10));
+      });
+    });
+
+    await terminateChildProcess(leader);
+
+    expect(() => process.kill(descendantPid, 0)).toThrow(
+      expect.objectContaining({ code: "ESRCH" })
     );
   });
 });

@@ -1,0 +1,9 @@
+{
+  "servers": {
+    "agentdoctor-release-demo": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["examples/mcp-release-server.mjs"]
+    }
+  }
+}

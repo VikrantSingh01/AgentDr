@@ -2,11 +2,16 @@ import { readFile } from "node:fs/promises";
 import { dirname, extname, resolve } from "node:path";
 import { Ajv2020 } from "ajv/dist/2020.js";
 import { parse } from "yaml";
+import { RESERVED_REDACTION_KEYS } from "./redaction.js";
 import { scenarioSchema } from "./scenario-schema.js";
-import type { Scenario } from "./types.js";
+import type { McpToolSnapshot, Scenario } from "./types.js";
 
 const ajv = new Ajv2020({ allErrors: true, strict: false });
 const validateScenario = ajv.compile<Scenario>(scenarioSchema);
+const validateMcpToolSnapshot = ajv.compile<McpToolSnapshot[]>({
+  type: "array",
+  items: scenarioSchema.$defs.mcpToolSnapshot
+});
 
 function parseDocument(path: string, content: string): unknown {
   if (extname(path).toLowerCase() === ".json") {
@@ -50,6 +55,30 @@ async function resolveFixtures(
   return fixtures;
 }
 
+async function resolveMcpToolSnapshot(
+  scenario: Scenario,
+  scenarioPath: string
+): Promise<void> {
+  const snapshot = scenario.mcp?.toolSnapshot;
+  if (!snapshot || Array.isArray(snapshot)) return;
+
+  const snapshotPath = resolve(dirname(scenarioPath), snapshot.$file);
+  let document: unknown;
+  try {
+    document = parseDocument(snapshotPath, await readFile(snapshotPath, "utf8"));
+  } catch {
+    throw new Error(`MCP tool snapshot was not found or invalid: ${snapshotPath}`);
+  }
+  if (!validateMcpToolSnapshot(document)) {
+    const errors = (validateMcpToolSnapshot.errors ?? [])
+      .map((error) => `${error.instancePath || "/"} ${error.message}`)
+      .join("; ");
+    throw new Error(`Invalid MCP tool snapshot: ${errors}`);
+  }
+
+  scenario.mcp!.toolSnapshot = document;
+}
+
 export async function loadScenario(path: string): Promise<{
   scenario: Scenario;
   fixtures: Record<string, unknown>;
@@ -68,6 +97,13 @@ export async function loadScenario(path: string): Promise<{
   }
 
   const scenario = document as Scenario;
+  for (const key of scenario.mcp?.redaction?.keys ?? []) {
+    if (RESERVED_REDACTION_KEYS.has(key)) {
+      throw new Error(
+        `Invalid redaction key ${key}: structural report fields cannot be redacted`
+      );
+    }
+  }
   for (const argumentExpectation of scenario.expect.tools?.arguments ?? []) {
     if (!argumentExpectation.schema) continue;
     try {
@@ -90,6 +126,7 @@ export async function loadScenario(path: string): Promise<{
       );
     }
   }
+  await resolveMcpToolSnapshot(scenario, scenarioPath);
 
   return {
     scenario,

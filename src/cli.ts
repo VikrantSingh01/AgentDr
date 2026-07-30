@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runAgentDoctor } from "./graph.js";
 import { initializeScenario } from "./initializer.js";
+import { inspectMcpServer, writeMcpSnapshot } from "./mcp-cli.js";
 import { inspectRun, printRunReport } from "./reporter.js";
 import { VERSION } from "./version.js";
 
@@ -14,12 +15,15 @@ Usage:
   agentdoctor init [scenario.yml]
   agentdoctor test <scenario.yml> -- <agent command> [arguments]
   agentdoctor inspect <run.json>
+  agentdoctor mcp inspect -- <server command> [arguments]
+  agentdoctor mcp snapshot <snapshot.json> -- <server command> [arguments]
   agentdoctor --version
 
 Examples:
   agentdoctor init
   agentdoctor test examples/release-safety.yml -- node examples/release-agent.mjs
   agentdoctor inspect .agentdoctor/runs/release-safety-<timestamp>.json
+  agentdoctor mcp inspect -- node examples/mcp-release-server.mjs
 
 Exit codes:
   0  all contracts passed
@@ -49,6 +53,26 @@ export async function runCli(args: string[]): Promise<0 | 1 | 2 | 3> {
     if (!args[1]) throw new Error("inspect requires a run report path");
     await inspectRun(args[1]);
     return 0;
+  }
+
+  if (args[0] === "mcp") {
+    const subcommand = args[1];
+    const separator = args.indexOf("--");
+    if (subcommand === "inspect") {
+      const command = separator === -1 ? args.slice(2) : args.slice(separator + 1);
+      await inspectMcpServer(command);
+      return 0;
+    }
+    if (subcommand === "snapshot") {
+      if (!args[2] || args[2] === "--") {
+        throw new Error("mcp snapshot requires an output path");
+      }
+      const command = separator === -1 ? args.slice(3) : args.slice(separator + 1);
+      const path = await writeMcpSnapshot(args[2], command);
+      console.log(`Wrote MCP tool snapshot to ${path}`);
+      return 0;
+    }
+    throw new Error(`Unknown MCP command: ${subcommand ?? ""}`);
   }
 
   if (args[0] !== "test") {

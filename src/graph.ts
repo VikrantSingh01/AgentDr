@@ -1,7 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
 import { AgentExecutionError, executeAgentProcess } from "./agent-process.js";
-import { evaluateRun } from "./evaluator.js";
+import {
+  evaluateMcpEvidence,
+  evaluateObservedPolicies,
+  evaluateRun
+} from "./evaluator.js";
+import { McpStdioProxy } from "./mcp-stdio-proxy.js";
+import { redactRunReport } from "./redaction.js";
 import { writeRunReport } from "./reporter.js";
 import { loadScenario } from "./scenario-loader.js";
 import type {
@@ -19,6 +25,7 @@ interface GraphState {
   cwd: string;
   outputDirectory: string;
   requestedCommand: string[];
+  requestedMcpCommand?: string[];
   scenario?: Scenario;
   fixtures?: Record<string, unknown>;
   command?: string[];
@@ -34,6 +41,7 @@ export interface RunOptions {
   command?: string[];
   cwd?: string;
   outputDirectory?: string;
+  mcpCommand?: string[];
 }
 
 const graph: Record<GraphNodeName, GraphNodeName | null> = {
@@ -65,12 +73,30 @@ async function runNode(node: GraphNodeName, state: GraphState): Promise<void> {
   }
 
   if (node === "execute") {
-    state.execution = await executeAgentProcess({
-      scenario: requireValue(state.scenario, "scenario"),
-      fixtures: requireValue(state.fixtures, "fixtures"),
-      command: requireValue(state.command, "command"),
-      cwd: state.cwd
-    });
+    const scenario = requireValue(state.scenario, "scenario");
+    const mcpConfiguration = scenario.mcp
+      ? {
+          ...scenario.mcp,
+          server: {
+            command:
+              state.requestedMcpCommand ?? scenario.mcp.server.command
+          }
+        }
+      : undefined;
+    const toolBackend = mcpConfiguration
+      ? new McpStdioProxy(mcpConfiguration, state.cwd)
+      : undefined;
+    try {
+      state.execution = await executeAgentProcess({
+        scenario,
+        fixtures: requireValue(state.fixtures, "fixtures"),
+        command: requireValue(state.command, "command"),
+        cwd: state.cwd,
+        toolBackend
+      });
+    } finally {
+      await toolBackend?.close();
+    }
     return;
   }
 
@@ -116,6 +142,7 @@ export async function runAgentDoctor(options: RunOptions): Promise<CompletedRun>
     cwd,
     outputDirectory: resolve(cwd, options.outputDirectory ?? ".agentdoctor/runs"),
     requestedCommand: options.command ?? [],
+    requestedMcpCommand: options.mcpCommand,
     transitions: []
   };
 
@@ -145,10 +172,23 @@ export async function runAgentDoctor(options: RunOptions): Promise<CompletedRun>
 
       if (currentNode === "execute" && error instanceof AgentExecutionError) {
         state.execution = error.execution;
+        const partialFindings = [
+          ...evaluateMcpEvidence(
+            requireValue(state.scenario, "scenario"),
+            error.execution.evidence
+          ),
+          ...evaluateObservedPolicies(
+            requireValue(state.scenario, "scenario"),
+            error.execution.evidence
+          )
+        ];
         state.decision = {
           status: "runtime_failed",
-          exitCode: 2,
+          exitCode: partialFindings.some((finding) => finding.severity === "critical")
+            ? 3
+            : 2,
           findings: [
+            ...partialFindings,
             {
               id: "runtime.execution",
               severity: "error",
@@ -179,7 +219,11 @@ export async function runAgentDoctor(options: RunOptions): Promise<CompletedRun>
     }
   }
 
-  const report = requireValue(state.report, "report");
+  const report = redactRunReport(
+    requireValue(state.report, "report"),
+    state.scenario?.mcp?.redaction
+  );
+  state.report = report;
   state.reportPath = await writeRunReport(report, state.outputDirectory);
 
   return {

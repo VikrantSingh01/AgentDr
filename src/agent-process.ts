@@ -1,16 +1,100 @@
-import { spawn } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
 import { createInterface } from "node:readline";
-import type { EvidenceEvent, ExecutionResult, Scenario } from "./types.js";
+import type { ToolBackend } from "./tool-backend.js";
+import type {
+  EvidenceEvent,
+  EvidenceEventInput,
+  ExecutionResult,
+  Scenario
+} from "./types.js";
 
 const MAX_STDOUT_BYTES = 1024 * 1024;
 const MAX_STDERR_BYTES = 1024 * 1024;
 const MAX_EVIDENCE_EVENTS = 10_000;
+const TERMINATION_GRACE_MS = 250;
+const FORCE_KILL_WAIT_MS = 1000;
+
+function waitForExit(child: ChildProcess, timeoutMs: number): Promise<boolean> {
+  if (child.exitCode !== null || child.signalCode !== null) {
+    return Promise.resolve(true);
+  }
+  return new Promise((resolvePromise) => {
+    const onExit = () => {
+      clearTimeout(timer);
+      resolvePromise(true);
+    };
+    const timer = setTimeout(() => {
+      child.off("exit", onExit);
+      resolvePromise(false);
+    }, timeoutMs);
+    child.once("exit", onExit);
+  });
+}
+
+function delay(timeoutMs: number): Promise<void> {
+  return new Promise((resolvePromise) => setTimeout(resolvePromise, timeoutMs));
+}
+
+function signalProcessTree(child: ChildProcess, signal: NodeJS.Signals): void {
+  if (!child.pid) return;
+  try {
+    if (process.platform !== "win32") {
+      process.kill(-child.pid, signal);
+    } else if (child.exitCode === null && child.signalCode === null) {
+      child.kill(signal);
+    }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ESRCH") {
+      try {
+        child.kill(signal);
+      } catch {
+        // The process exited between status inspection and signaling.
+      }
+    }
+  }
+}
+
+async function waitForProcessGroupGone(
+  processGroupId: number,
+  timeoutMs: number
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      process.kill(-processGroupId, 0);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ESRCH") return;
+    }
+    await delay(20);
+  }
+}
+
+export async function terminateChildProcess(child: ChildProcess): Promise<void> {
+  if (!child.pid) return;
+  if (process.platform !== "win32") {
+    const processGroupId = child.pid;
+    signalProcessTree(child, "SIGTERM");
+    await delay(TERMINATION_GRACE_MS);
+    signalProcessTree(child, "SIGKILL");
+    await Promise.all([
+      waitForExit(child, FORCE_KILL_WAIT_MS),
+      waitForProcessGroupGone(processGroupId, FORCE_KILL_WAIT_MS)
+    ]);
+    return;
+  }
+  if (child.exitCode !== null || child.signalCode !== null) return;
+  signalProcessTree(child, "SIGTERM");
+  if (await waitForExit(child, TERMINATION_GRACE_MS)) return;
+  signalProcessTree(child, "SIGKILL");
+  await waitForExit(child, FORCE_KILL_WAIT_MS);
+}
 
 interface AgentProcessOptions {
   scenario: Scenario;
   fixtures: Record<string, unknown>;
   command: string[];
   cwd: string;
+  toolBackend?: ToolBackend;
 }
 
 export class AgentExecutionError extends Error {
@@ -40,15 +124,6 @@ type AgentOutput =
       type: "final";
       status: string;
       output?: unknown;
-    };
-
-type EvidenceInput =
-  | AgentOutput
-  | {
-      type: "tool_result";
-      callId: string;
-      tool: string;
-      result: unknown;
     };
 
 function parseAgentOutput(line: string): AgentOutput {
@@ -106,9 +181,46 @@ export async function executeAgentProcess(
 
   const startedAt = new Date();
   const evidence: EvidenceEvent[] = [];
+  let stderr = "";
   const hardTimeoutMs = Math.max(
     (options.scenario.performance?.maxDurationMs ?? 15_000) * 2,
     5_000
+  );
+  const sanitize = <T>(value: T): T =>
+    (options.toolBackend?.redact(value) ?? value) as T;
+
+  const snapshot = (): ExecutionResult => ({
+    command: options.command,
+    startedAt: startedAt.toISOString(),
+    durationMs: Date.now() - startedAt.getTime(),
+    evidence: [...evidence],
+    stderr: sanitize(stderr)
+  });
+
+  const record = (event: EvidenceEventInput) => {
+    if (evidence.length >= MAX_EVIDENCE_EVENTS) {
+      throw new Error(`Agent exceeded the evidence limit of ${MAX_EVIDENCE_EVENTS} events`);
+    }
+    evidence.push({
+      ...event,
+      sequence: evidence.length + 1,
+      timestamp: new Date().toISOString()
+    } as EvidenceEvent);
+  };
+
+  if (options.toolBackend) {
+    try {
+      for (const event of await options.toolBackend.start(hardTimeoutMs)) record(event);
+    } catch (error) {
+      throw new AgentExecutionError(
+        sanitize(error instanceof Error ? error.message : String(error)),
+        snapshot()
+      );
+    }
+  }
+  const remainingHardTimeoutMs = Math.max(
+    1,
+    hardTimeoutMs - (Date.now() - startedAt.getTime())
   );
 
   return new Promise<ExecutionResult>((resolvePromise, rejectPromise) => {
@@ -116,46 +228,29 @@ export async function executeAgentProcess(
       cwd: options.cwd,
       env: { ...process.env, AGENTDOCTOR_PROTOCOL: "0.1" },
       stdio: ["pipe", "pipe", "pipe"],
-      windowsHide: true
+      windowsHide: true,
+      detached: process.platform !== "win32"
     });
     const lines = createInterface({ input: child.stdout });
-    let stderr = "";
     let stdoutBytes = 0;
     let finalReceived = false;
     let settled = false;
+    let pendingToolCall: string | undefined;
     const callIds = new Set<string>();
-
-    const snapshot = (): ExecutionResult => ({
-      command: options.command,
-      startedAt: startedAt.toISOString(),
-      durationMs: Date.now() - startedAt.getTime(),
-      evidence: [...evidence],
-      stderr
-    });
-
-    const record = (event: EvidenceInput) => {
-      if (evidence.length >= MAX_EVIDENCE_EVENTS) {
-        throw new Error(`Agent exceeded the evidence limit of ${MAX_EVIDENCE_EVENTS} events`);
-      }
-      evidence.push({
-        ...event,
-        sequence: evidence.length + 1,
-        timestamp: new Date().toISOString()
-      } as EvidenceEvent);
-    };
 
     const fail = (error: Error) => {
       if (settled) return;
       settled = true;
       clearTimeout(timeout);
       lines.close();
-      child.kill();
-      rejectPromise(new AgentExecutionError(error.message, snapshot()));
+      void terminateChildProcess(child).finally(() => {
+        rejectPromise(new AgentExecutionError(sanitize(error.message), snapshot()));
+      });
     };
 
     const timeout = setTimeout(() => {
       fail(new Error(`Agent exceeded the hard timeout of ${hardTimeoutMs}ms`));
-    }, hardTimeoutMs);
+    }, remainingHardTimeoutMs);
 
     child.stdout.on("data", (chunk: Buffer) => {
       stdoutBytes += chunk.length;
@@ -189,53 +284,87 @@ export async function executeAgentProcess(
       );
     });
 
-    lines.on("line", (line) => {
+    const resolveToolCall = async (
+      event: Extract<AgentOutput, { type: "tool_call" }>,
+      argumentsValue: Record<string, unknown>
+    ) => {
+      let result: unknown;
+      if (options.toolBackend) {
+        const resolution = await options.toolBackend.call(event.tool, argumentsValue);
+        result = resolution.result;
+        record({
+          type: "tool_result",
+          callId: event.callId,
+          tool: event.tool,
+          result: resolution.evidenceResult ?? resolution.result,
+          source: resolution.source,
+          durationMs: resolution.durationMs,
+          resultBytes: resolution.resultBytes,
+          ...(resolution.isError ? { isError: true } : {})
+        });
+      } else {
+        if (!Object.hasOwn(options.fixtures, event.tool)) {
+          throw new Error(`No fixture is configured for tool ${event.tool}`);
+        }
+        result = options.fixtures[event.tool];
+        record({
+          type: "tool_result",
+          callId: event.callId,
+          tool: event.tool,
+          result,
+          source: "fixture"
+        });
+      }
+      child.stdin.write(
+        `${JSON.stringify({
+          type: "tool_result",
+          callId: event.callId,
+          tool: event.tool,
+          result
+        })}\n`
+      );
+      pendingToolCall = undefined;
+    };
+
+    const handleLine = (line: string) => {
       if (line.trim().length === 0 || settled) return;
 
+      if (finalReceived) {
+        throw new Error("Agent emitted output after its final event");
+      }
+      const event = parseAgentOutput(line);
+      if (pendingToolCall) {
+        throw new Error(
+          `Agent emitted ${event.type} before observing tool result for ${pendingToolCall}`
+        );
+      }
+      if (event.type === "tool_call") {
+        if (callIds.has(event.callId)) {
+          throw new Error(`Agent reused tool call ID: ${event.callId}`);
+        }
+        callIds.add(event.callId);
+        pendingToolCall = event.callId;
+        const argumentsValue = event.arguments ?? {};
+        record({
+          ...event,
+          arguments: argumentsValue
+        });
+        void resolveToolCall(event, argumentsValue).catch((error: unknown) => {
+          fail(error instanceof Error ? error : new Error(String(error)));
+        });
+        return;
+      }
+
+      record(event);
+      if (event.type === "final") {
+        finalReceived = true;
+        child.stdin.end();
+      }
+    };
+
+    lines.on("line", (line) => {
       try {
-        if (finalReceived) {
-          throw new Error("Agent emitted output after its final event");
-        }
-        const event = parseAgentOutput(line);
-        if (event.type === "tool_call") {
-          if (callIds.has(event.callId)) {
-            throw new Error(`Agent reused tool call ID: ${event.callId}`);
-          }
-          callIds.add(event.callId);
-          const toolEvent = {
-            ...event,
-            arguments: event.arguments ?? {}
-          };
-          record(toolEvent);
-
-          if (!Object.hasOwn(options.fixtures, event.tool)) {
-            fail(new Error(`No fixture is configured for tool ${event.tool}`));
-            return;
-          }
-
-          const result = options.fixtures[event.tool];
-          record({
-            type: "tool_result",
-            callId: event.callId,
-            tool: event.tool,
-            result
-          });
-          child.stdin.write(
-            `${JSON.stringify({
-              type: "tool_result",
-              callId: event.callId,
-              tool: event.tool,
-              result
-            })}\n`
-          );
-          return;
-        }
-
-        record(event);
-        if (event.type === "final") {
-          finalReceived = true;
-          child.stdin.end();
-        }
+        handleLine(line);
       } catch (error) {
         fail(error instanceof Error ? error : new Error(String(error)));
       }
@@ -252,6 +381,10 @@ export async function executeAgentProcess(
       }
       if (!finalReceived) {
         fail(new Error("Agent exited without emitting a final event"));
+        return;
+      }
+      if (pendingToolCall) {
+        fail(new Error(`Agent exited before observing tool result for ${pendingToolCall}`));
         return;
       }
 

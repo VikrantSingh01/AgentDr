@@ -25,6 +25,8 @@ jobs:
       - run: npm ci
       - run: npm run check
       - run: git diff --exit-code -- schema/scenario-0.1.json
+      - run: npm run snapshot:mcp
+      - run: git diff --exit-code -- examples/fixtures/mcp-release-tools.snapshot.json
       - run: node dist/src/cli.js test examples/release-safety.yml -- node examples/release-agent.mjs
 
   package:

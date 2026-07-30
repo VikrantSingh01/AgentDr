@@ -111,4 +111,63 @@ expect:
 
     await expect(loadScenario(path)).rejects.toThrow("Invalid outcome schema");
   });
+
+  it("rejects redaction keys that would corrupt safety evidence", async () => {
+    const path = await writeScenario(`
+schemaVersion: "0.1"
+id: unsafe-redaction
+input:
+  message: test
+mcp:
+  server:
+    command: [node, server.mjs]
+  redaction:
+    keys: [tool]
+expect: {}
+`);
+
+    await expect(loadScenario(path)).rejects.toThrow(
+      "Invalid redaction key tool"
+    );
+  });
+
+    it("rejects redaction keys that would corrupt event shapes", async () => {
+      const path = await writeScenario(`
+  schemaVersion: "0.1"
+  id: unsafe-event-redaction
+  input:
+    message: test
+  mcp:
+    server:
+      command: [node, server.mjs]
+    redaction:
+      keys: [arguments]
+  expect: {}
+  `);
+
+      await expect(loadScenario(path)).rejects.toThrow(
+        "Invalid redaction key arguments"
+      );
+    });
+
+    it("rejects redaction keys that would corrupt discovered contracts", async () => {
+      for (const key of ["required", "$ref", "items", "version"]) {
+        const path = await writeScenario(`
+  schemaVersion: "0.1"
+  id: unsafe-contract-redaction-${key.replace(/[^a-z]/gi, "")}
+  input:
+    message: test
+  mcp:
+    server:
+      command: [node, server.mjs]
+    redaction:
+      keys: ["${key}"]
+  expect: {}
+  `);
+
+        await expect(loadScenario(path)).rejects.toThrow(
+          `Invalid redaction key ${key}`
+        );
+      }
+    });
 });

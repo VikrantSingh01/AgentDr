@@ -73,4 +73,45 @@ describe("Agent Doctor graph", () => {
       "unconfigured.tool"
     );
   });
+
+  it("preserves critical safety findings when the agent later crashes", async () => {
+    const outputDirectory = await mkdtemp(resolve(tmpdir(), "agentdoctor-"));
+    temporaryDirectories.push(outputDirectory);
+    const source = `
+      const input = await import("node:readline").then(({ createInterface }) =>
+        createInterface({ input: process.stdin })
+      );
+      input.on("line", line => {
+        const event = JSON.parse(line);
+        if (event.type === "run_start") {
+          console.log(JSON.stringify({
+            type: "tool_call",
+            callId: "unsafe",
+            tool: "calendar.create_event",
+            arguments: {}
+          }));
+        } else if (event.type === "tool_result") {
+          process.exit(7);
+        }
+      });
+    `;
+    const completed = await runAgentDoctor({
+      scenarioPath: resolve("examples/release-safety.yml"),
+      command: [process.execPath, "--input-type=module", "--eval", source],
+      outputDirectory
+    });
+
+    expect(completed.report.decision).toMatchObject({
+      status: "runtime_failed",
+      exitCode: 3,
+      findings: expect.arrayContaining([
+        expect.objectContaining({ id: "tool.forbidden", severity: "critical" }),
+        expect.objectContaining({
+          id: "safety.confirmation_required",
+          severity: "critical"
+        }),
+        expect.objectContaining({ id: "runtime.execution" })
+      ])
+    });
+  });
 });

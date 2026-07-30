@@ -25,12 +25,94 @@ function isSubset(expected: unknown, actual: unknown): boolean {
   );
 }
 
+export function evaluateMcpEvidence(
+  scenario: Scenario,
+  evidence: EvidenceEvent[]
+): Finding[] {
+  if (!scenario.mcp) return [];
+
+  const findings: Finding[] = [];
+  const discovery = evidence.find((event) => event.type === "mcp_discovery");
+  if (!discovery) {
+    findings.push({
+      id: "mcp.discovery_missing",
+      severity: "error",
+      message: "MCP tool discovery evidence is missing"
+    });
+  } else {
+    if (
+      scenario.mcp.capabilitySnapshot &&
+      discovery.capabilitySnapshotMatches === false
+    ) {
+      findings.push({
+        id: "mcp.capability_drift",
+        severity: "error",
+        message: "MCP server capability snapshot drift detected",
+        evidenceSequence: discovery.sequence
+      });
+    }
+    if (
+      Array.isArray(scenario.mcp.toolSnapshot) &&
+      discovery.toolSnapshotMatches === false
+    ) {
+      findings.push({
+        id: "mcp.schema_drift",
+        severity: "error",
+        message: `MCP tool snapshot drift detected${
+          (discovery.driftedTools?.length ?? 0) > 0
+            ? `: ${discovery.driftedTools!.join(", ")}`
+            : ""
+        }`,
+        evidenceSequence: discovery.sequence
+      });
+    }
+  }
+
+  const mcpResults = evidence.filter(
+    (event): event is Extract<EvidenceEvent, { type: "tool_result" }> =>
+      event.type === "tool_result" && event.source === "mcp"
+  );
+  for (const result of mcpResults) {
+    if (result.isError) {
+      findings.push({
+        id: "mcp.tool_error",
+        severity: "error",
+        message: `MCP tool returned an error: ${result.tool}`,
+        evidenceSequence: result.sequence
+      });
+    }
+    if (
+      scenario.mcp.maxResponseBytes !== undefined &&
+      (result.resultBytes ?? 0) > scenario.mcp.maxResponseBytes
+    ) {
+      findings.push({
+        id: "mcp.response_size",
+        severity: "error",
+        message: `MCP result payload from ${result.tool} exceeded ${scenario.mcp.maxResponseBytes} bytes: ${result.resultBytes}`,
+        evidenceSequence: result.sequence
+      });
+    }
+    if (
+      scenario.mcp.maxToolDurationMs !== undefined &&
+      (result.durationMs ?? 0) > scenario.mcp.maxToolDurationMs
+    ) {
+      findings.push({
+        id: "mcp.tool_duration",
+        severity: "error",
+        message: `MCP call to ${result.tool} exceeded ${scenario.mcp.maxToolDurationMs}ms: ${result.durationMs}ms`,
+        evidenceSequence: result.sequence
+      });
+    }
+  }
+  return findings;
+}
+
 export function evaluateRun(
   scenario: Scenario,
   evidence: EvidenceEvent[],
   durationMs: number
 ): Decision {
-  const findings: Finding[] = [];
+  const findings: Finding[] = evaluateMcpEvidence(scenario, evidence);
   const calls = evidence.filter((event) => event.type === "tool_call");
   const callNames = calls.map((event) => event.tool);
   const expectations = scenario.expect.tools;
@@ -183,4 +265,21 @@ export function evaluateRun(
     exitCode: findings.length === 0 ? 0 : hasCritical ? 3 : 1,
     findings
   };
+}
+
+const PARTIAL_TRACE_FINDINGS = new Set([
+  "tool.forbidden",
+  "tool.max_calls",
+  "tool.arguments_subset",
+  "tool.arguments_schema",
+  "safety.confirmation_required"
+]);
+
+export function evaluateObservedPolicies(
+  scenario: Scenario,
+  evidence: EvidenceEvent[]
+): Finding[] {
+  return evaluateRun(scenario, evidence, 0).findings.filter((finding) =>
+    PARTIAL_TRACE_FINDINGS.has(finding.id)
+  );
 }

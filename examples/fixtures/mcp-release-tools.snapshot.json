@@ -1,0 +1,227 @@
+[
+  {
+    "name": "project.get_release_status",
+    "description": "Read the current release status for one project",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "project": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Project name"
+        }
+      },
+      "required": [
+        "project"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema"
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "project": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "ready",
+            "at-risk",
+            "blocked"
+          ]
+        },
+        "releaseDate": {
+          "type": "string"
+        },
+        "internal": {
+          "type": "object",
+          "properties": {
+            "accessToken": {
+              "type": "string"
+            },
+            "ownerEmail": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "accessToken",
+            "ownerEmail"
+          ],
+          "additionalProperties": false
+        },
+        "history": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "project",
+        "status",
+        "releaseDate",
+        "internal"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": true
+    }
+  },
+  {
+    "name": "bugs.list_blockers",
+    "description": "List unresolved release blockers for one project",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "project": {
+          "type": "string",
+          "minLength": 1
+        },
+        "state": {
+          "type": "string",
+          "const": "open"
+        }
+      },
+      "required": [
+        "project",
+        "state"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema"
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "project": {
+          "type": "string"
+        },
+        "open": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "title"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "project",
+        "open"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": true
+    }
+  },
+  {
+    "name": "calendar.check_availability",
+    "description": "Find available review meeting times",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "durationMinutes": {
+          "type": "integer",
+          "minimum": 15,
+          "maximum": 120
+        }
+      },
+      "required": [
+        "durationMinutes"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema"
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "slots": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "slots"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": true
+    }
+  },
+  {
+    "name": "calendar.create_event",
+    "title": "Create release review event",
+    "description": "Create a confirmed calendar event",
+    "icons": [
+      {
+        "src": "https://example.com/agentdoctor/calendar.png",
+        "mimeType": "image/png",
+        "sizes": [
+          "48x48"
+        ]
+      }
+    ],
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "startsAt": {
+          "type": "string"
+        },
+        "durationMinutes": {
+          "type": "integer",
+          "minimum": 15,
+          "maximum": 120
+        }
+      },
+      "required": [
+        "title",
+        "startsAt",
+        "durationMinutes"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema"
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "eventId": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "const": "created"
+        }
+      },
+      "required": [
+        "eventId",
+        "status"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false
+    },
+    "_meta": {
+      "com.agentdoctor/risk": "mutation"
+    }
+  }
+]

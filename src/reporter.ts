@@ -2,6 +2,17 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { RunReport } from "./types.js";
 
+export function escapeGitHubCommandValue(value: string): string {
+  return value
+    .replaceAll("%", "%25")
+    .replaceAll("\r", "%0D")
+    .replaceAll("\n", "%0A");
+}
+
+function singleLineTerminalValue(value: string): string {
+  return value.replaceAll("\r", "\\r").replaceAll("\n", "\\n");
+}
+
 function parseRunReport(content: string): RunReport {
   let document: unknown;
   try {
@@ -63,11 +74,15 @@ export function printRunReport(report: RunReport, reportPath: string): void {
     const sequence = finding.evidenceSequence
       ? ` [evidence #${finding.evidenceSequence}]`
       : "";
-    console.log(`  ${finding.severity.toUpperCase()} ${finding.message}${sequence}`);
+    const displayMessage =
+      process.env.GITHUB_ACTIONS === "true"
+        ? singleLineTerminalValue(finding.message)
+        : finding.message;
+    console.log(`  ${finding.severity.toUpperCase()} ${displayMessage}${sequence}`);
 
     if (process.env.GITHUB_ACTIONS === "true") {
       const command = finding.severity === "critical" ? "error" : "warning";
-      console.log(`::${command}::${finding.message.replaceAll("%", "%25")}`);
+      console.log(`::${command}::${escapeGitHubCommandValue(finding.message)}`);
     }
   }
   console.log(`Evidence: ${reportPath}`);
@@ -77,10 +92,20 @@ export async function inspectRun(path: string): Promise<void> {
   const report = parseRunReport(await readFile(resolve(path), "utf8"));
   printRunReport(report, resolve(path));
   for (const event of report.evidence) {
-    if (event.type === "tool_call") {
+    if (event.type === "mcp_discovery") {
+      console.log(
+        `  #${event.sequence} MCP ${event.serverInfo?.name ?? "server"}@${event.serverInfo?.version ?? "unknown"} TOOLS ${event.tools.map((tool) => tool.name).join(", ")} (${event.durationMs}ms)`
+      );
+    } else if (event.type === "tool_call") {
       console.log(`  #${event.sequence} CALL ${event.tool} ${JSON.stringify(event.arguments)}`);
     } else if (event.type === "tool_result") {
-      console.log(`  #${event.sequence} RESULT ${event.tool}`);
+      const metrics =
+        event.source === "mcp"
+          ? ` (${event.durationMs ?? 0}ms, ${event.resultBytes ?? 0} result bytes)`
+          : "";
+      console.log(
+        `  #${event.sequence} ${event.isError ? "ERROR" : "RESULT"} ${event.tool}${metrics}`
+      );
     } else if (event.type === "confirmation") {
       console.log(`  #${event.sequence} CONFIRMATION ${event.confirmed}`);
     } else {
