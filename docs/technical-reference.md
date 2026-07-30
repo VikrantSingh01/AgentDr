@@ -34,7 +34,9 @@ Current deterministic assertions include:
 - required and forbidden tools;
 - ordered tool subsequences and maximum calls;
 - argument subset and JSON Schema validation;
-- one-use, tool-scoped confirmation before protected calls;
+- one-use, tool-scoped or exact-argument-bound confirmation before protected calls;
+- optional pre-dispatch enforcement for forbidden and confirmation-protected calls;
+- semantic checks for core policy contradictions and fixture reachability;
 - final status, output subset, and output schema;
 - whole-run duration;
 - MCP capability and tool snapshot drift;
@@ -51,6 +53,27 @@ fixtures:
   project.get_release_status:
     $file: fixtures/release.json
 ```
+
+Repeated calls can use ordered `$cases`:
+
+```yaml
+fixtures:
+  records.lookup:
+    $cases:
+      - callIndex: 0
+        arguments: { project: Apollo }
+        result: { page: 1, next: true }
+      - callIndex: 1
+        arguments: { project: Apollo }
+        result:
+          $file: fixtures/page-2.json
+```
+
+Cases are tested top to bottom. `callIndex` is zero-based per tool and
+`arguments` uses deterministic subset matching. Both selectors may be combined.
+A result-only case is a catch-all and must be last. The loader also rejects
+duplicate selectors and broader earlier cases that would shadow later cases. No
+match is a runtime failure rather than a success-shaped fallback.
 
 Fixture replay runs the adapter live but replaces only responses to tool calls
 emitted through Agent Doctor's JSONL protocol. It is not recorded full-run
@@ -107,14 +130,31 @@ inspectable evidence, while protocol/runtime failures normally exit `2`.
 Confirmation is explicit evidence:
 
 ```json
-{"type":"confirmation","confirmed":true,"tool":"calendar.create_event","source":"user-dialog"}
+{"type":"confirmation","confirmed":true,"tool":"calendar.create_event","source":"user-dialog","arguments":{"title":"Apollo review","durationMinutes":30}}
 ```
 
-It satisfies the contract for one subsequent call to the same tool. A
+It satisfies the contract for one subsequent call to the same tool. With
+`expect.confirmation.bindArguments: true`, its `arguments` must exactly match the
+subsequent call structurally. A
 confirmation for another tool, a reused confirmation, or `confirmed: false`
-does not satisfy it. This event is adapter-attested: Agent Doctor does not
-independently authenticate the user or bind consent to arguments, principal,
-or expiry. Production adapters remain responsible for those guarantees.
+does not satisfy it. This event remains adapter-attested: Agent Doctor can check
+the structural argument binding but does not independently authenticate a user,
+principal, tenant, issuance time, or expiry. Production adapters remain
+responsible for those guarantees.
+
+## Pre-dispatch enforcement
+
+Set `enforcement.preDispatch: true` to check forbidden-tool and confirmation
+policies before a protocol-mediated call reaches a fixture or MCP server. The
+harness records `requested`, then either `authorized` and `dispatched`, or
+`denied`. Successful backend completion adds `completed`; denied requests have
+no dispatch, completion, or tool-result evidence.
+
+Authorization denial fails the run with critical exit code `3`. Because the
+current JSONL protocol has no negotiated denial-response event, the harness
+terminates the adapter and persists partial evidence. This mode prevents only
+dispatches controlled by Agent Doctor. It cannot prevent an adapter from using
+network, filesystem, subprocess, native MCP, or other out-of-band capabilities.
 
 ## Trust boundaries
 
@@ -123,10 +163,11 @@ trusted code. Run scenarios from untrusted sources only in an appropriately
 isolated environment.
 
 Agent Doctor observes events cooperatively emitted over JSONL and MCP calls made
-through its harness proxy. Evaluation occurs after events arrive. The current
-runner is not a sandbox, a complete side-effect monitor, or a pre-dispatch
-authorization gate. The MCP path validates server interaction through the
-harness; it does not exercise a child agent's own native MCP client stack.
+through its harness proxy. Observe mode evaluates after events arrive;
+enforcement mode adds a pre-dispatch gate for configured, harness-mediated
+calls. The runner is not a sandbox or complete side-effect monitor. The MCP path
+validates server interaction through the harness; it does not exercise a child
+agent's own native MCP client stack.
 
 ## Partial failures
 

@@ -8,8 +8,9 @@ deterministic behavioral contract tester. It observes cooperative JSONL events
 and harness-mediated MCP calls, evaluates them after they occur, and fails the
 run when evidence violates a scenario.
 
-It is not currently a sandbox, a complete side-effect monitor, or a
-pre-dispatch authorization gateway.
+It is not a sandbox or complete side-effect monitor. It now has an optional
+pre-dispatch gate for configured calls routed through the harness, but it is not
+a general authorization gateway for child-process activity.
 
 ## Executive assessment
 
@@ -29,8 +30,8 @@ remain implementation work for any enforcement-grade mode.
 
 | Priority | Finding | Current consequence | Status |
 |---|---|---|---|
-| Critical | Evaluation is post-observation, not pre-dispatch enforcement. | A mediated or out-of-band side effect may occur before the run fails. | Boundary documented; policy-gate architecture required. |
-| Critical | Confirmation is adapter-attested. | The harness cannot prove who approved which arguments, under which identity, or for how long. | Boundary documented; harness-controlled capability required. |
+| Critical | Enforcement is limited to harness-mediated dispatch. | Out-of-band child activity remains outside policy control. | Optional fail-closed gate added for fixture and MCP calls; isolation remains required. |
+| Critical | Confirmation identity is adapter-attested. | The harness can bind exact arguments but cannot prove who approved them, in which tenant, or for how long. | Structural argument binding added; trusted capability issuance remains required. |
 | High | Observation is cooperative and incomplete. | A child process can bypass JSONL and use files, network, subprocesses, or another client directly. | Boundary documented; isolation and instrumentation required. |
 | High | Scenario commands execute as trusted local code. | An untrusted scenario can launch arbitrary adapter or MCP commands with runner privileges. | Trust warning documented; isolated execution mode required. |
 | High | The MCP flow is harness-proxied. | It validates the server and requested calls but not the child agent's own native MCP client implementation. | Demo wording corrected; native-client adapter needed for that claim. |
@@ -60,37 +61,43 @@ vulnerabilities in the repository.
   explicit exit codes.
 - Added static final frames, literal CLI inspect output, compact report-derived
   summaries, and normalized post-redaction reports beside animated demos.
+- Added ordered argument/index fixture cases and semantic checks for duplicate,
+  unreachable, contradictory, and impossible contracts.
+- Added optional pre-dispatch enforcement with requested, authorized, denied,
+  dispatched, and completed evidence.
+- Added exact structural argument binding for one-use confirmation events.
 
-These changes improve the accuracy of the release. They do not close the
-underlying enforcement, identity, or isolation gaps.
+These changes close the harness-dispatch gap for configured fixture and MCP
+calls. They do not close identity, trusted approval issuance, isolation, or
+out-of-band enforcement gaps.
 
 ## Prioritized roadmap
 
 ### 1. Introduce an enforcement-capable invocation boundary
 
-Move protected operations behind a harness-owned dispatch API. Evaluate policy
-before forwarding a call, produce separate `requested`, `authorized`,
-`dispatched`, and `completed` evidence, and fail closed when authorization is
-missing or evidence cannot be persisted. Keep the current observe-and-test mode
-for frameworks that cannot delegate dispatch.
+The fixture and MCP paths now evaluate configured policy before forwarding a
+call and produce separate lifecycle evidence. Keep strengthening this boundary
+with a negotiated denial protocol and host integrations that cannot bypass
+dispatch.
 
 Acceptance criteria:
 
-- a denied call never reaches the fixture, MCP server, or external connector;
-- reports distinguish attempted calls from dispatched calls;
-- crash and timeout tests prove fail-closed behavior at the dispatch boundary;
-- product language uses “prevent” only for calls routed through this mode.
+- complete: denied fixture/MCP calls do not reach the backend;
+- complete: reports distinguish requested, denied, and dispatched calls;
+- complete: E2E tests prove denial has no dispatch, result, or completion;
+- remaining: negotiate denial responses and integrate external connectors.
 
 ### 2. Make confirmation harness-controlled and bound
 
-Represent approval as a short-lived, one-use capability issued by a trusted
-host integration. Bind it to the authenticated principal, tenant, tool, a
+Exact argument binding is now available for one-use adapter-attested
+confirmation. The remaining target is a short-lived capability issued by a
+trusted host integration and bound to the authenticated principal, tenant, tool, a
 canonical digest of arguments, policy version, nonce, issuance time, and
 expiry. Consume it atomically at dispatch.
 
 Acceptance criteria:
 
-- changing the tool or arguments invalidates approval;
+- complete: changing the tool or exact arguments invalidates structural approval;
 - replay, expiry, wrong-principal, and wrong-tenant cases are rejected;
 - reports identify the verifier and binding fields without persisting secrets.
 
@@ -105,9 +112,10 @@ until a Job Object or equivalent containment strategy is implemented.
 
 Derive an inventory of mutating or destructive tools from configured policy and
 MCP annotations, while requiring explicit review rather than assuming server
-metadata is authoritative. Detect contradictions, unreachable required calls,
-duplicate assertions, protected tools without confirmation policy, and fixtures
-that cannot satisfy argument or outcome schemas.
+metadata is authoritative. Core linting now detects required/forbidden conflicts, impossible call budgets,
+forbidden ordered calls, duplicate fixture selectors, and unreachable fixture
+cases. Continue with mutating-tool inventory, duplicate assertions, unprotected
+mutations, and fixture/result schema satisfiability.
 
 ### 5. Add provenance and reproducibility manifests
 
