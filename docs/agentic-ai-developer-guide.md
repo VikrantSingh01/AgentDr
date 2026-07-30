@@ -61,7 +61,7 @@ performance:
 
 This is intentionally not a transcript. It specifies the invariants that matter while leaving the agent free to vary inconsequential details. Argument and outcome subsets tolerate additional fields; JSON Schema assertions are available when the complete shape matters. Required, forbidden, ordered, and maximum call checks turn a vague instruction such as "use the tools correctly" into reviewable policy.
 
-There is also an important separation of concerns. The scenario describes expected behavior. The evidence log records what happened. The evaluator maps evidence to findings. A report therefore has a reproducible path from policy to event sequence to CI decision, rather than a score with no inspectable cause.
+There is also an important separation of concerns. The scenario describes expected behavior. The evidence log records what happened. The evaluator maps evidence to findings. A report therefore has an inspectable path from policy to event sequence to CI decision, rather than a score with no inspectable cause.
 
 ## A Plan-Act-Observe Loop You Can Inspect
 
@@ -83,7 +83,7 @@ The runner enforces the loop's mechanics at event arrival time. When it accepts 
 
 The sample also includes two seeded regressions. One changes the structured summary to claim the release is ready with zero blockers even though the tool result contains an open blocker. The other calls `calendar.create_event` without emitting confirmation. The first is a quality failure; the second is a critical safety failure. Both are found without judging natural-language style.
 
-## Confirmation Is a One-Shot, Tool-Scoped Capability
+## Confirmation Is a One-Shot, Tool-Scoped Assertion
 
 A boolean named `confirmed` is easy to misuse as ambient authority. Once set, it can accidentally authorize later or unrelated mutations. Agent Doctor instead records confirmation as an event containing the specific tool name:
 
@@ -91,7 +91,7 @@ A boolean named `confirmed` is easy to misuse as ambient authority. Once set, it
 {"type":"confirmation","confirmed":true,"tool":"calendar.create_event","source":"input.data.confirmed"}
 ```
 
-For each protected call, the evaluator looks for a matching confirmation after the previous call to that tool and before the current call. A confirmation for `files.delete` cannot authorize `calendar.create_event`; one confirmation cannot authorize two event creations. In capability terms, confirmation is scoped to one tool and consumed by one subsequent invocation.
+For each protected call, the evaluator looks for a matching confirmation after the previous call to that tool and before the current call. A confirmation for `files.delete` cannot satisfy the contract for `calendar.create_event`; one confirmation cannot satisfy it for two event creations. Within the evaluator's evidence model, the assertion is scoped to one tool and consumed by one subsequent invocation.
 
 This remains an evidence contract, not a user-interface implementation. The runner does not infer consent from a prompt, hidden model reasoning, or a server annotation. An adapter must emit observable confirmation evidence from a trustworthy source. Production systems still need to bind that event to an authenticated user interaction and defend the adapter boundary.
 
@@ -150,11 +150,11 @@ The authoritative references are the [MCP specification](https://modelcontextpro
 
 The repository runs the same state-driven agent in two modes.
 
-Fixture replay executes the agent live but resolves tool calls from versioned inline or file-backed values. It is fast, repeatable, and side-effect free. It is well suited to planner regressions: given the same observations, did the agent select the same four tools and produce the expected structured assessment?
+Fixture replay executes the adapter live but resolves JSONL-mediated tool calls from versioned inline or file-backed values. It is fast and repeatable for those responses, but it does not intercept arbitrary child-process side effects or make model behavior deterministic. It is well suited to planner regressions: given the same recorded observations, did the agent select the expected tools and produce the expected structured assessment?
 
 Live MCP starts a local stdio server and exercises initialization, discovery, calls, result decoding, deadlines, shutdown, and server diagnostics. The demo still uses deterministic local data. It tests a real transport and SDK implementation, not production networking, authentication, external APIs, or model nondeterminism.
 
-Both modes are necessary. Fixture replay isolates agent behavior; live MCP validates integration behavior. Calling fixture replay "full deterministic reproduction" would be inaccurate because the agent process is still executing and a model-backed agent may vary. Calling the local MCP demo a production integration test would be equally inaccurate.
+Both modes are necessary. Fixture replay isolates mediated responses from backend variability; live MCP validates integration behavior. Calling fixture replay "full deterministic reproduction" would be inaccurate because the agent process is still executing and a model-backed agent may vary. Calling the local MCP demo a production integration test would be equally inaccurate.
 
 ## Snapshot Capabilities and Tool Contracts, Not Incidental JSON
 

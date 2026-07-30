@@ -36,9 +36,12 @@
     "test:mcp": "npm run build && vitest run test/mcp-e2e.test.ts --reporter=verbose",
     "snapshot:mcp": "npm run build && node scripts/update-mcp-snapshot.mjs",
     "record:mcp": "npm run build && node scripts/record-mcp-demo.mjs",
+    "record:readme": "npm run build && node scripts/record-readme-demos.mjs && python scripts/render-demo-gifs.py docs/assets/mcp-pass.summary.txt docs/assets/mcp-pass.gif \"Real MCP flow passes\" \"initialize to tools to evidence\" && python scripts/render-demo-gifs.py docs/assets/safety-failure.summary.txt docs/assets/safety-failure.gif \"Safety regression detected\" \"fixture evidence to exit 3\"",
+    "render:marketing": "python scripts/render-marketing-image.py",
+    "validate:readme": "node scripts/validate-readme.mjs",
     "demo": "node dist/src/cli.js test examples/agentic-release-contract.yml -- node examples/agentic-release-assistant.mjs",
     "demo:mcp": "node dist/src/cli.js test examples/mcp-release-contract.yml",
-    "check": "npm run build && npm test",
+    "check": "npm run build && npm run validate:readme && npm test",
     "prepack": "npm run build"
   },
   "engines": {

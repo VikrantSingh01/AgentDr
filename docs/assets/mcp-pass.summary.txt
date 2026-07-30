@@ -1,0 +1,15 @@
+$ agentdoctor test examples/mcp-release-contract.yml
+PASS mcp-release-assistant
+#1 mcp_discovery tools=4
+#2 tool_call project.get_release_status
+#3 tool_result project.get_release_status source=mcp
+#4 tool_call bugs.list_blockers
+#5 tool_result bugs.list_blockers source=mcp
+#6 tool_call calendar.check_availability
+#7 tool_result calendar.check_availability source=mcp
+#8 confirmation calendar.create_event
+#9 tool_call calendar.create_event
+#10 tool_result calendar.create_event source=mcp
+#11 final status=completed
+Exit code: 0
+Report: ./docs/assets/mcp-pass.report.json

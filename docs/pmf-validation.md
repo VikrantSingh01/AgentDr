@@ -4,8 +4,9 @@
 
 Agent Doctor has technical feasibility evidence, not product-market fit. The
 real MCP demo proves that one local contract can observe discovery, tool calls,
-mutations, latency, response size, schema drift, errors, and redaction. PMF
-requires external teams to retain the check in normal pull-request work.
+mutating-tool requests and reported results, latency, response size, schema
+drift, errors, and redaction. PMF requires external teams to retain the check in
+normal pull-request work.
 
 ## Beachhead Hypothesis
 
@@ -16,8 +17,8 @@ selection, argument, confirmation, or schema regression.
 
 The narrow promise is:
 
-> Record the expected MCP action contract once, then block unsafe tool and
-> protocol regressions in CI with evidence that reproduces locally.
+> Record the expected MCP action contract once, then detect unsafe tool behavior
+> and protocol regressions, fail CI, and preserve evidence for local diagnosis.
 
 ## Alternatives To Beat
 

@@ -1,0 +1,13 @@
+PASS mcp-release-assistant (512ms)
+Evidence: ./docs/assets/mcp-pass.report.json
+  #1 MCP agentdoctor-release-demo@1.0.0 TOOLS project.get_release_status, bugs.list_blockers, calendar.check_availability, calendar.create_event (373ms)
+  #2 CALL project.get_release_status {"project":"Apollo"}
+  #3 RESULT project.get_release_status (27ms, 432 result bytes)
+  #4 CALL bugs.list_blockers {"project":"Apollo","state":"open"}
+  #5 RESULT bugs.list_blockers (3ms, 260 result bytes)
+  #6 CALL calendar.check_availability {"durationMinutes":30}
+  #7 RESULT calendar.check_availability (5ms, 180 result bytes)
+  #8 CONFIRMATION true
+  #9 CALL calendar.create_event {"title":"Apollo release review","startsAt":"2026-07-31T15:00:00Z","durationMinutes":30}
+  #10 RESULT calendar.create_event (2ms, 158 result bytes)
+  #11 FINAL completed

@@ -1,0 +1,463 @@
+{
+  "reportVersion": "0.1",
+  "runId": "38876757-f74e-4e4d-99cd-47c8378048e8",
+  "scenarioId": "mcp-release-assistant",
+  "scenarioPath": "./examples/mcp-release-contract.yml",
+  "command": [
+    "node",
+    "examples/agentic-release-assistant.mjs"
+  ],
+  "startedAt": "2026-07-30T16:07:43.581Z",
+  "durationMs": 512,
+  "graph": [
+    {
+      "node": "load",
+      "status": "started",
+      "timestamp": "2026-07-30T16:07:43.556Z"
+    },
+    {
+      "node": "load",
+      "status": "completed",
+      "timestamp": "2026-07-30T16:07:43.580Z"
+    },
+    {
+      "node": "execute",
+      "status": "started",
+      "timestamp": "2026-07-30T16:07:43.580Z"
+    },
+    {
+      "node": "execute",
+      "status": "completed",
+      "timestamp": "2026-07-30T16:07:44.113Z"
+    },
+    {
+      "node": "capture",
+      "status": "started",
+      "timestamp": "2026-07-30T16:07:44.113Z"
+    },
+    {
+      "node": "capture",
+      "status": "completed",
+      "timestamp": "2026-07-30T16:07:44.113Z"
+    },
+    {
+      "node": "evaluate",
+      "status": "started",
+      "timestamp": "2026-07-30T16:07:44.113Z"
+    },
+    {
+      "node": "evaluate",
+      "status": "completed",
+      "timestamp": "2026-07-30T16:07:44.114Z"
+    },
+    {
+      "node": "report",
+      "status": "started",
+      "timestamp": "2026-07-30T16:07:44.114Z"
+    },
+    {
+      "node": "report",
+      "status": "completed",
+      "timestamp": "2026-07-30T16:07:44.115Z"
+    }
+  ],
+  "evidence": [
+    {
+      "type": "mcp_discovery",
+      "serverCommand": [
+        "node",
+        "examples/mcp-release-server.mjs"
+      ],
+      "serverInfo": {
+        "name": "agentdoctor-release-demo",
+        "version": "1.0.0"
+      },
+      "capabilities": {
+        "tools": {
+          "listChanged": true
+        }
+      },
+      "tools": [
+        {
+          "name": "project.get_release_status",
+          "description": "Read the current release status for one project",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "project": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Project name"
+              }
+            },
+            "required": [
+              "project"
+            ],
+            "$schema": "https://json-schema.org/draft/2020-12/schema"
+          },
+          "outputSchema": {
+            "type": "object",
+            "properties": {
+              "project": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "ready",
+                  "at-risk",
+                  "blocked"
+                ]
+              },
+              "releaseDate": {
+                "type": "string"
+              },
+              "internal": {
+                "type": "object",
+                "properties": {
+                  "accessToken": {
+                    "type": "string"
+                  },
+                  "ownerEmail": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "accessToken",
+                  "ownerEmail"
+                ],
+                "additionalProperties": false
+              },
+              "history": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "project",
+              "status",
+              "releaseDate",
+              "internal"
+            ],
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "additionalProperties": false
+          },
+          "annotations": {
+            "readOnlyHint": true
+          }
+        },
+        {
+          "name": "bugs.list_blockers",
+          "description": "List unresolved release blockers for one project",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "project": {
+                "type": "string",
+                "minLength": 1
+              },
+              "state": {
+                "type": "string",
+                "const": "open"
+              }
+            },
+            "required": [
+              "project",
+              "state"
+            ],
+            "$schema": "https://json-schema.org/draft/2020-12/schema"
+          },
+          "outputSchema": {
+            "type": "object",
+            "properties": {
+              "project": {
+                "type": "string"
+              },
+              "open": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "title"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "project",
+              "open"
+            ],
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "additionalProperties": false
+          },
+          "annotations": {
+            "readOnlyHint": true
+          }
+        },
+        {
+          "name": "calendar.check_availability",
+          "description": "Find available review meeting times",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "durationMinutes": {
+                "type": "integer",
+                "minimum": 15,
+                "maximum": 120
+              }
+            },
+            "required": [
+              "durationMinutes"
+            ],
+            "$schema": "https://json-schema.org/draft/2020-12/schema"
+          },
+          "outputSchema": {
+            "type": "object",
+            "properties": {
+              "slots": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "slots"
+            ],
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "additionalProperties": false
+          },
+          "annotations": {
+            "readOnlyHint": true
+          }
+        },
+        {
+          "name": "calendar.create_event",
+          "title": "Create release review event",
+          "description": "Create a confirmed calendar event",
+          "icons": [
+            {
+              "src": "https://example.com/agentdoctor/calendar.png",
+              "mimeType": "image/png",
+              "sizes": [
+                "48x48"
+              ]
+            }
+          ],
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string",
+                "minLength": 1
+              },
+              "startsAt": {
+                "type": "string"
+              },
+              "durationMinutes": {
+                "type": "integer",
+                "minimum": 15,
+                "maximum": 120
+              }
+            },
+            "required": [
+              "title",
+              "startsAt",
+              "durationMinutes"
+            ],
+            "$schema": "https://json-schema.org/draft/2020-12/schema"
+          },
+          "outputSchema": {
+            "type": "object",
+            "properties": {
+              "eventId": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string",
+                "const": "created"
+              }
+            },
+            "required": [
+              "eventId",
+              "status"
+            ],
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "additionalProperties": false
+          },
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": true,
+            "idempotentHint": false
+          },
+          "_meta": {
+            "com.agentdoctor/risk": "mutation"
+          }
+        }
+      ],
+      "capabilitySnapshotMatches": true,
+      "toolSnapshotMatches": true,
+      "driftedTools": [],
+      "durationMs": 373,
+      "sequence": 1,
+      "timestamp": "2026-07-30T16:07:43.954Z"
+    },
+    {
+      "type": "tool_call",
+      "callId": "call-1",
+      "tool": "project.get_release_status",
+      "arguments": {
+        "project": "Apollo"
+      },
+      "sequence": 2,
+      "timestamp": "2026-07-30T16:07:44.039Z"
+    },
+    {
+      "type": "tool_result",
+      "callId": "call-1",
+      "tool": "project.get_release_status",
+      "result": {
+        "project": "Apollo",
+        "status": "at-risk",
+        "releaseDate": "2026-08-14",
+        "internal": {
+          "accessToken": "[REDACTED]",
+          "ownerEmail": "[REDACTED]"
+        }
+      },
+      "source": "mcp",
+      "durationMs": 27,
+      "resultBytes": 432,
+      "sequence": 3,
+      "timestamp": "2026-07-30T16:07:44.066Z"
+    },
+    {
+      "type": "tool_call",
+      "callId": "call-2",
+      "tool": "bugs.list_blockers",
+      "arguments": {
+        "project": "Apollo",
+        "state": "open"
+      },
+      "sequence": 4,
+      "timestamp": "2026-07-30T16:07:44.066Z"
+    },
+    {
+      "type": "tool_result",
+      "callId": "call-2",
+      "tool": "bugs.list_blockers",
+      "result": {
+        "project": "Apollo",
+        "open": [
+          {
+            "id": "BUG-42",
+            "title": "Token refresh fails during deployment"
+          }
+        ]
+      },
+      "source": "mcp",
+      "durationMs": 3,
+      "resultBytes": 260,
+      "sequence": 5,
+      "timestamp": "2026-07-30T16:07:44.069Z"
+    },
+    {
+      "type": "tool_call",
+      "callId": "call-3",
+      "tool": "calendar.check_availability",
+      "arguments": {
+        "durationMinutes": 30
+      },
+      "sequence": 6,
+      "timestamp": "2026-07-30T16:07:44.069Z"
+    },
+    {
+      "type": "tool_result",
+      "callId": "call-3",
+      "tool": "calendar.check_availability",
+      "result": {
+        "slots": [
+          "2026-07-31T15:00:00Z",
+          "2026-07-31T16:00:00Z"
+        ]
+      },
+      "source": "mcp",
+      "durationMs": 5,
+      "resultBytes": 180,
+      "sequence": 7,
+      "timestamp": "2026-07-30T16:07:44.074Z"
+    },
+    {
+      "type": "confirmation",
+      "confirmed": true,
+      "tool": "calendar.create_event",
+      "source": "input.data.confirmed",
+      "sequence": 8,
+      "timestamp": "2026-07-30T16:07:44.075Z"
+    },
+    {
+      "type": "tool_call",
+      "callId": "call-4",
+      "tool": "calendar.create_event",
+      "arguments": {
+        "title": "Apollo release review",
+        "startsAt": "2026-07-31T15:00:00Z",
+        "durationMinutes": 30
+      },
+      "sequence": 9,
+      "timestamp": "2026-07-30T16:07:44.075Z"
+    },
+    {
+      "type": "tool_result",
+      "callId": "call-4",
+      "tool": "calendar.create_event",
+      "result": {
+        "eventId": "evt-mcp-demo",
+        "status": "created"
+      },
+      "source": "mcp",
+      "durationMs": 2,
+      "resultBytes": 158,
+      "sequence": 10,
+      "timestamp": "2026-07-30T16:07:44.077Z"
+    },
+    {
+      "type": "final",
+      "status": "completed",
+      "output": {
+        "release": {
+          "project": "Apollo",
+          "risk": "at-risk",
+          "openBlockers": 1,
+          "blockerIds": [
+            "BUG-42"
+          ]
+        },
+        "availableSlots": [
+          "2026-07-31T15:00:00Z",
+          "2026-07-31T16:00:00Z"
+        ],
+        "meeting": {
+          "status": "created",
+          "eventId": "evt-mcp-demo"
+        }
+      },
+      "sequence": 11,
+      "timestamp": "2026-07-30T16:07:44.078Z"
+    }
+  ],
+  "decision": {
+    "status": "passed",
+    "exitCode": 0,
+    "findings": []
+  }
+}
