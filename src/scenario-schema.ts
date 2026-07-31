@@ -18,6 +18,14 @@ export const scenarioSchema = {
         $argument: { type: "string", minLength: 1 }
       }
     },
+    outcomeReference: {
+      type: "object",
+      additionalProperties: false,
+      required: ["$fromOutcome"],
+      properties: {
+        $fromOutcome: { type: "string", minLength: 1 }
+      }
+    },
     correlationCriteria: {
       type: "object",
       minProperties: 1,
@@ -25,8 +33,12 @@ export const scenarioSchema = {
         if: { type: "object", required: ["$fromResult"] },
         then: { $ref: "#/$defs/resultReference" },
         else: {
-          if: { type: "object", required: ["$argument"] },
-          then: { $ref: "#/$defs/argumentReference" }
+          if: { type: "object", required: ["$fromOutcome"] },
+          then: { $ref: "#/$defs/outcomeReference" },
+          else: {
+            if: { type: "object", required: ["$argument"] },
+            then: { $ref: "#/$defs/argumentReference" }
+          }
         }
       }
     },
@@ -280,8 +292,12 @@ export const scenarioSchema = {
                       },
                       then: { $ref: "#/$defs/resultReference" },
                       else: {
-                        if: { type: "object", required: ["$argument"] },
-                        then: { $ref: "#/$defs/argumentReference" }
+                        if: { type: "object", required: ["$fromOutcome"] },
+                        then: { $ref: "#/$defs/outcomeReference" },
+                        else: {
+                          if: { type: "object", required: ["$argument"] },
+                          then: { $ref: "#/$defs/argumentReference" }
+                        }
                       }
                     }
                   },

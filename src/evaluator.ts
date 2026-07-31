@@ -301,7 +301,8 @@ export function evaluateRun(
           argumentExpectation.match,
           call.arguments,
           evidence,
-          call.sequence
+          call.sequence,
+          final?.output
         );
         if (outcome.unresolved.length > 0) {
           findings.push({
@@ -419,17 +420,32 @@ export function evaluateRun(
       evidenceSequence: final?.sequence
     });
   }
-  if (
-    final &&
-    scenario.expect.outcome?.match !== undefined &&
-    !isSubset(scenario.expect.outcome.match, final.output)
-  ) {
-    findings.push({
-      id: "outcome.output_subset",
-      severity: "error",
-      message: "Final output did not contain the expected values",
-      evidenceSequence: final.sequence
-    });
+  if (final && scenario.expect.outcome?.match !== undefined) {
+    // The outcome is matched with the same reference resolver used for tool
+    // arguments, so a contract can say the reported summary must agree with
+    // what the tools actually returned instead of pinning it to the literals
+    // one baseline run happened to produce.
+    const outcome = matchWithReferences(
+      scenario.expect.outcome.match,
+      final.output,
+      evidence,
+      final.sequence
+    );
+    if (outcome.unresolved.length > 0) {
+      findings.push({
+        id: "outcome.reference_unresolved",
+        severity: "error",
+        message: `Final output expectation references a result that was not observed: ${outcome.unresolved.join(", ")}`,
+        evidenceSequence: final.sequence
+      });
+    } else if (!outcome.matched) {
+      findings.push({
+        id: "outcome.output_subset",
+        severity: "error",
+        message: "Final output did not contain the expected values",
+        evidenceSequence: final.sequence
+      });
+    }
   }
   if (final && scenario.expect.outcome?.schema) {
     const validate = ajv.compile(scenario.expect.outcome.schema);

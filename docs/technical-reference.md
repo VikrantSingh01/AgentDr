@@ -46,6 +46,50 @@ Current deterministic assertions include:
 - MCP capability and tool snapshot drift;
 - MCP tool error, completed-call latency, and serialized result-byte budgets.
 
+## Conditional obligations
+
+A `required` list is an obligation without a scope. Demanding every tool in every
+run means the contract fits only the world it was recorded in: a week with no
+aged bugs, or a frozen rollout, is reported as a failure even though doing
+nothing was correct.
+
+An entry may instead be an object carrying a condition over the agent's final
+output:
+
+```yaml
+expect:
+  tools:
+    required:
+      - ado.query_untriaged_bugs
+      - tool: teams.post_escalation
+        when:
+          outcomePath: escalatedBugIds
+          nonEmpty: true
+      - tool: ecs.advance_rollout_ring
+        when:
+          outcomePath: ringAdvance.attempted
+          equals: true
+```
+
+The relationship is a biconditional. When the condition holds and the tool was
+not called, the finding is `tool.required_when`. When the condition does not hold
+and the tool *was* called, the finding is `tool.forbidden_when` — an agent that
+takes a consequential action and then reports that it did not is diverging from
+its own account, which is a defect in its own right and not merely a relaxed
+obligation.
+
+Choose the conditioning path with care. A condition that reads the agent's
+verdict about whether it acted can be escaped by declining to act and reporting
+so. Anchor it to something derived from observed data instead: `escalatedBugIds`
+is computed from the backlog and stays non-empty even when the agent skips the
+escalation, whereas `escalated` does not.
+
+If the referenced path is absent from the final output, the finding is
+`tool.condition_unresolved`. A condition the harness could not evaluate is never
+a pass. Scenario linting rejects a tool listed both unconditionally and
+conditionally, a condition declaring neither `equals` nor `nonEmpty`, a condition
+declaring both, and `nonEmpty: false`, which states no condition at all.
+
 ## Scoped expectations
 
 Run-wide expectations overfit or under-constrain whenever a tool is called more
@@ -414,6 +458,82 @@ is reported explicitly and is never treated as a pass. Scenario linting rejects 
 reference to a forbidden tool, a reference whose target the declared `order`
 places later, and a `callIndex` beyond the referenced tool's declared ceiling,
 because none can ever resolve.
+
+## Selection policies
+
+A join criterion is a conjunction by default. Real selection policies are often
+disjunctive — "high signal" may mean severity `S1` *or* priority `1` — and the
+only way to express that with conjunctions is to enumerate the records the
+baseline happened to contain, which is the literal-pinning problem again.
+
+`$anyOf` takes at least two alternative criteria objects and matches when any one
+of them matches. The surrounding keys still apply:
+
+```yaml
+- tool: ado.update_work_item
+  match:
+    id:
+      $fromResult:
+        tool: ado.query_untriaged_bugs
+        path: bugs
+        find:
+          id:
+            $argument: id
+          $anyOf:
+            - severity: S1
+            - priority: 1
+        select: id
+```
+
+This states that every update must target a bug the backlog reports as high
+signal. An update aimed at anything else finds no matching record, so the
+reference cannot resolve and `tool.arguments_reference_unresolved` is reported.
+The policy is stated once and holds for any backlog.
+
+## Derived outcomes
+
+`expect.outcome.match` accepts `$fromResult` on the same terms as an argument
+expectation. Pinning the outcome to the values one baseline run produced makes
+the contract a snapshot test: every correct run over different data is rejected,
+and the literal only catches misreporting in the single world it was recorded
+from. Correlating it to what the tools actually returned holds in every world and
+catches the divergence in all of them:
+
+```yaml
+expect:
+  outcome:
+    status: completed
+    match:
+      rollout:
+        currentRing:
+          $fromResult:
+            tool: ecs.get_rollout_status
+            path: currentRing
+```
+
+An unresolvable reference here reports `outcome.reference_unresolved` rather than
+passing.
+
+`$fromOutcome` reads a path in the final output from inside an *argument*
+expectation, which states the converse: what the agent did must agree with what
+it reported doing.
+
+```yaml
+- tool: ecs.advance_rollout_ring
+  match:
+    fromRing:
+      $fromOutcome: ringAdvance.fromRing
+    toRing:
+      $fromOutcome: ringAdvance.toRing
+```
+
+Writing this as an argument expectation rather than an outcome expectation is
+deliberate. It is scoped to the calls that actually happened, so it says nothing
+in the worlds where the action was correctly not taken, whereas the same
+constraint placed in `outcome.match` would fail every such world. A missing
+reported path is `tool.arguments_reference_unresolved`, never a pass. Scenario
+linting rejects `$fromOutcome` inside `outcome.match`, where it would compare the
+final output against itself and could never fail.
 
 ## Current boundaries
 

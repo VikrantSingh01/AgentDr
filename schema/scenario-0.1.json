@@ -28,6 +28,19 @@
         }
       }
     },
+    "outcomeReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "$fromOutcome"
+      ],
+      "properties": {
+        "$fromOutcome": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
     "correlationCriteria": {
       "type": "object",
       "minProperties": 1,
@@ -45,11 +58,22 @@
           "if": {
             "type": "object",
             "required": [
-              "$argument"
+              "$fromOutcome"
             ]
           },
           "then": {
-            "$ref": "#/$defs/argumentReference"
+            "$ref": "#/$defs/outcomeReference"
+          },
+          "else": {
+            "if": {
+              "type": "object",
+              "required": [
+                "$argument"
+              ]
+            },
+            "then": {
+              "$ref": "#/$defs/argumentReference"
+            }
           }
         }
       }
@@ -514,11 +538,22 @@
                         "if": {
                           "type": "object",
                           "required": [
-                            "$argument"
+                            "$fromOutcome"
                           ]
                         },
                         "then": {
-                          "$ref": "#/$defs/argumentReference"
+                          "$ref": "#/$defs/outcomeReference"
+                        },
+                        "else": {
+                          "if": {
+                            "type": "object",
+                            "required": [
+                              "$argument"
+                            ]
+                          },
+                          "then": {
+                            "$ref": "#/$defs/argumentReference"
+                          }
                         }
                       }
                     }

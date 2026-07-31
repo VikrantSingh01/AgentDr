@@ -50,6 +50,16 @@ export interface ArgumentReference {
  * be called when it does not. Stating it one-way would let an agent take a
  * consequential action and simply not report it.
  */
+/**
+ * A reference to a path in the agent's own final output, usable from an
+ * argument expectation. Stating "what you did must match what you reported"
+ * this way scopes the check to the calls that actually happened, so it does not
+ * fire in worlds where the action was legitimately not taken.
+ */
+export interface OutcomeReference {
+  $fromOutcome: string;
+}
+
 export interface ConditionalRequirement {
   tool: string;
   when: {

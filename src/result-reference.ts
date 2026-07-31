@@ -41,6 +41,45 @@ export interface ResolutionContext {
   evidence: EvidenceEvent[];
   beforeSequence: number;
   callArguments: unknown;
+  finalOutput?: unknown;
+}
+
+interface OutcomeReferenceNode {
+  $fromOutcome: string;
+}
+
+export function isOutcomeReferenceNode(value: unknown): value is OutcomeReferenceNode {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value) &&
+    Object.hasOwn(value, "$fromOutcome")
+  );
+}
+
+export function validateOutcomeReference(value: unknown): string[] {
+  const errors: string[] = [];
+  const node = value as OutcomeReferenceNode;
+  if (typeof node.$fromOutcome !== "string" || node.$fromOutcome.length === 0) {
+    errors.push("$fromOutcome requires a non-empty output path");
+  }
+  if (Object.keys(value as object).length > 1) {
+    errors.push("$fromOutcome must be the only property of its object");
+  }
+  return errors;
+}
+
+export function collectOutcomeReferenceNodes(expected: unknown): unknown[] {
+  if (isOutcomeReferenceNode(expected)) return [expected];
+  if (Array.isArray(expected)) {
+    return expected.flatMap((entry) => collectOutcomeReferenceNodes(entry));
+  }
+  if (expected !== null && typeof expected === "object") {
+    return Object.values(expected as Record<string, unknown>).flatMap((entry) =>
+      collectOutcomeReferenceNodes(entry)
+    );
+  }
+  return [];
 }
 
 function describeCriteria(criteria: Record<string, unknown>): string {
@@ -89,6 +128,18 @@ function validateCriteria(
     errors.push(`$fromResult ${label} must declare at least one key`);
   }
   for (const [key, value] of entries) {
+    if (key === "$anyOf") {
+      if (!Array.isArray(value) || value.length < 2) {
+        errors.push(
+          `$fromResult ${label} $anyOf must be an array of at least two alternatives`
+        );
+        continue;
+      }
+      value.forEach((branch, index) =>
+        validateCriteria(`${label} $anyOf[${index}]`, branch, errors)
+      );
+      continue;
+    }
     if (key.length === 0) {
       errors.push(`$fromResult ${label} keys must be non-empty paths`);
     }
@@ -222,6 +273,15 @@ function criteriaMatch(
   context: ResolutionContext
 ): boolean {
   return Object.entries(criteria).every(([path, expected]) => {
+    if (path === "$anyOf") {
+      // A selection policy is often a disjunction ("severity S1 or priority 1").
+      // Without this the only way to express one is to enumerate the records the
+      // baseline happened to contain, which is the literal-pinning trap again.
+      if (!Array.isArray(expected)) return false;
+      return expected.some((branch) =>
+        criteriaMatch(branch as Record<string, unknown>, subject, context)
+      );
+    }
     const read = readPath(subject, path);
     if (!read.found) return false;
     const values = resolveExpectedValues(expected, context);
@@ -324,6 +384,15 @@ function walk(
     return candidates.some((candidate) => isStructurallyEqual(candidate, actual));
   }
 
+  if (isOutcomeReferenceNode(expected)) {
+    const read = readPath(context.finalOutput, expected.$fromOutcome);
+    if (!read.found) {
+      unresolved.push(`$fromOutcome.${expected.$fromOutcome}`);
+      return false;
+    }
+    return isStructurallyEqual(read.value, actual);
+  }
+
   if (isArgumentReferenceNode(expected)) {
     const read = readPath(context.callArguments, expected.$argument);
     if (!read.found) {
@@ -354,13 +423,15 @@ export function matchWithReferences(
   expected: unknown,
   actual: unknown,
   evidence: EvidenceEvent[],
-  beforeSequence: number
+  beforeSequence: number,
+  finalOutput?: unknown
 ): ReferenceMatch {
   const unresolved: string[] = [];
   const context: ResolutionContext = {
     evidence,
     beforeSequence,
-    callArguments: actual
+    callArguments: actual,
+    finalOutput
   };
   const matched = walk(expected, actual, context, unresolved);
   return { matched, unresolved };

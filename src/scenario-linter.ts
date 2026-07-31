@@ -1,6 +1,11 @@
 import type { ResolvedFixtures, ResultReference, Scenario } from "./types.js";
 import { isStructurallyEqual, isSubset } from "./value-match.js";
-import { collectReferenceNodes, validateReference } from "./result-reference.js";
+import {
+  collectOutcomeReferenceNodes,
+  collectReferenceNodes,
+  validateOutcomeReference,
+  validateReference
+} from "./result-reference.js";
 
 export function lintScenario(
   scenario: Scenario,
@@ -268,6 +273,41 @@ export function lintScenario(
       ) {
         errors.push(
           `Argument expectation for ${argumentExpectation.tool} references ${reference.tool}, which the declared order places later`
+        );
+      }
+    }
+  }
+
+  // Correlated expectations in the outcome are as capable of being unresolvable
+  // as correlated arguments, so they get the same static checks. Without this a
+  // contract can reference a tool it also forbids and only discover at run time
+  // that the expectation could never have held.
+  for (const node of collectReferenceNodes(scenario.expect.outcome?.match)) {
+    const shapeErrors = validateReference(node);
+    for (const shapeError of shapeErrors) {
+      errors.push(`Outcome expectation is invalid: ${shapeError}`);
+    }
+    if (shapeErrors.length === 0 && forbidden.has((node as ResultReference).tool)) {
+      errors.push(
+        `Outcome expectation references forbidden tool ${(node as ResultReference).tool}, so it can never resolve`
+      );
+    }
+  }
+
+  // A $fromOutcome reference inside the outcome expectation would compare the
+  // final output against itself, which can never fail and therefore states
+  // nothing.
+  for (const node of collectOutcomeReferenceNodes(scenario.expect.outcome?.match)) {
+    errors.push(
+      `Outcome expectation uses $fromOutcome (${(node as { $fromOutcome: string }).$fromOutcome}), which would compare the final output against itself`
+    );
+  }
+
+  for (const argumentExpectation of tools?.arguments ?? []) {
+    for (const node of collectOutcomeReferenceNodes(argumentExpectation.match)) {
+      for (const shapeError of validateOutcomeReference(node)) {
+        errors.push(
+          `Argument expectation for ${argumentExpectation.tool} is invalid: ${shapeError}`
         );
       }
     }
