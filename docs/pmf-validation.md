@@ -6,7 +6,8 @@ Agent Doctor has technical feasibility evidence, not product-market fit.
 
 The current release proves that one local contract can:
 
-- replay repeated tool calls with argument-aware and call-index-aware fixtures;
+- replay repeated tool calls with argument-aware, call-index-aware, and
+  shared-key fixtures;
 - exercise a real MCP stdio server through the official TypeScript SDK v2;
 - check tools, arguments, order, outcomes, confirmation, latency, response size,
   errors, and exact MCP capability or tool-snapshot drift;
@@ -18,10 +19,9 @@ The current release proves that one local contract can:
 - preserve partial evidence and return stable CI exit codes;
 - sanitize configured sensitive values before report persistence.
 
-The current README reports 140 deterministic tests across 16 files and eight
-live MCP cases. Those results prove implementation quality. They do not prove
-that external teams have a recurring problem, can onboard independently, will
-retain scenarios, or will pay.
+AgentDr itself currently has 260 tests across 24 files. Those results prove
+implementation quality. They do not prove that external teams have a recurring
+problem, can onboard independently, will retain scenarios, or will pay.
 
 The first reference-agent measurement is intentionally harsher. The
 `em-triage-steward` contract is measured adversarially two ways, across the full
@@ -29,27 +29,42 @@ cycle:
 
 | Metric | Start of cycle | End of cycle |
 |---|---:|---:|
-| Mutation score | 58.8% (20 killed / 34 scorable) | **96.7% (29 killed, 1 survivor)** |
+| Mutation score | 58.8% (20 killed / 34 scorable) | **98.1% (52 killed / 53 scorable, 1 survivor)** |
 | Survivors | 14 | **1** |
-| False positives | 7 of 8 worlds (87.5%) | **8 of 11 worlds (72.7%)** |
-| Over-blocked behaviour-preserving mutants | not measured | **1** (`reorder:5`) |
+| False positives | 7 of 8 worlds (87.5%) | **0 of 11 worlds (0.0%)** |
+| Over-blocked behaviour-preserving mutants | not measured | **0** (`reorder:5` passes at exit 0) |
 
 The absolute false-positive count matters more than the rate alone. Across the
-cycle it went 7 -> 9 -> 8: it rose before it fell, and 8 of 11 is still a poor
-false-positive result. The instrument is sharp at catching real defects and
-still too blunt at tolerating legitimate variation.
+cycle it went 7 -> 9 -> 8 before reaching 0 of 11: it rose before it fell, then
+the shipped relational join and outcome-shape fixes removed the remaining false
+positives. The instrument is sharp at catching real defects and now tolerates
+the measured correct-behaviour worlds. That is not a general PMF claim; it is
+one contract, one agent, and one task.
 
-The mutation denominator now excludes 4 invalid mutants and 4
+The current mutation run generates 57 mutants from 7 operators and scores 53 of
+them: 52 killed and 1 survivor. It found 0 invalid mutants and excluded 4
 behaviour-preserving ones. Excluding behaviour-preserving mutants is not score
 inflation: a mutant that produces a byte-identical outcome via an identical
 multiset of tool calls should survive, and counting it as a miss would reward an
 over-strict contract. The harness proves equivalence by hashing the outcome and
 call multiset against a live baseline run, rather than trusting a label.
 
-This is the PMF trade-off to test: recall is done on this workload, but
-precision is not. Removing the global `maxCalls` ceiling, the total-order
-`order` list, and the `update -> escalation` precedence rule reduced
-over-blocking without losing a mutant kill.
+The corpus also had to get harsher. The original 5 operators perturbed how a
+call was made or whether it happened, but not what the agent reported. Adding
+`misreport-outcome` and `select-extra` grew the scorable corpus from 34 to 53
+mutants and initially dropped the score to 89.6%, exposing 4 genuine defects.
+The single surviving mutant is `swap-arg:7:summary`, a free-text prose summary
+field.
+
+Separately, the seeded-fault suite catches 10 of 10 seeded faults and keeps 2
+correct-behaviour baselines passing.
+
+On this workload, the PMF trade-off has moved: deterministic recall and
+precision are credible together, but only inside the measured boundary. Removing
+the global `maxCalls` ceiling, the total-order `order` list, and the `update ->
+escalation` precedence rule reduced over-blocking without losing a mutant kill.
+The relational join cleared one false positive and the last over-block, and
+property-shaped outcome assertions cleared the remaining 7 false positives.
 
 ## Beachhead Hypothesis
 
@@ -86,15 +101,22 @@ contract:
 
 | Earlier capability | Current capability | PMF implication |
 |---|---|---|
-| One fixture result per tool | Ordered cases selected by arguments and call index | Real repeated-call workflows can be represented without custom fixture-selection logic |
+| One fixture result per tool | Ordered cases selected by arguments, call index, and shared keys | Real repeated-call workflows can be represented without custom fixture-selection logic |
 | Post-run confirmation finding | Optional exact argument binding and pre-dispatch denial | Teams can test both detection and bounded prevention |
 | Tool call plus result evidence | Explicit request-to-completion lifecycle | Reviewers can distinguish attempted, denied, and dispatched actions |
 | Schema validation only | Core semantic linting | Contradictory or unreachable scenarios fail before consuming CI time |
 | MCP-focused positioning | Fixture and MCP paths share one evaluator and report | Teams can adopt cheaply, then add real transport coverage |
+| One run judged independently | `--repeat N` compares report shape across identical runs | Run-dependent report paths become visible before they become review noise |
 
 The PMF question is no longer only whether teams want MCP conformance checks. It
 is whether they will maintain deterministic action contracts as normal release
 infrastructure.
+
+`--repeat N` matters because a contract judges one run at a time. Three GitHub
+Copilot runs against an identical prompt and identical fixtures produced 23
+paths that appeared in some runs and not others. That instability is directly
+PMF-relevant: real, widely used agents exhibit it today, and the rest of the
+user's toolchain is unlikely to see it.
 
 ## Alternatives To Beat
 
@@ -115,8 +137,9 @@ scenario maintenance is expensive.
 The differentiated product hypothesis is hybrid but contained: deterministic
 checks now carry almost all assertion volume at near-zero marginal cost, while a
 future local SLM handles only the measured residual semantic edge case that opts
-in. Once the deterministic layer can scope an assertion to a call, to a count,
-and to the data, it catches every structural defect in this workload. The single
+in. The deterministic layer can now scope an assertion to a call, to a count, to
+a shared-key lookup, to data-derived set size, and to worlds selected by a
+condition. It catches every structural defect in this workload. The single
 surviving defect is `swap-arg:7:summary`, a free-text escalation summary swapped
 for different prose. That edge must be local for zero egress and compliance,
 grounded in existing evidence, advisory by default, auditable in the report, and
@@ -139,6 +162,8 @@ These boundaries may be acceptable, or they may block adoption:
   native MCP client implementation;
 - scenarios and their commands are trusted local code;
 - the current topology is one adapter, one MCP server, and sequential calls;
+- the published measurement still covers one contract, one reference agent, and
+  one task; generalisation remains an open validity threat;
 - retrieval grounding, citations, multi-turn sessions, HTTP, concurrency, and
   production trace ingestion are not implemented;
 - configured key-based redaction is not general data-loss prevention.
@@ -219,20 +244,26 @@ Exit criterion: retained use plus explicit commercial intent.
 
 ## SLM edge validation rule
 
-Do not add a model to improve-looking metrics before the next deterministic
-contract is fixed. The SLM layer is designed, not shipped. The vocabulary gaps
-from the previous review are now largely closed by call-indexed arguments,
+Do not add a model to improve-looking metrics before the deterministic contract
+is exhausted. The SLM layer is designed, not shipped. The vocabulary gaps from
+the previous review are now largely closed by call-indexed arguments,
 call-indexed `$fromResult`, per-tool budgets, `callsMatchOutcome`, `distinct`,
-and strict `precedence`. The remaining deterministic gap is a relational join:
-being able to say "this argument must equal the result of the lookup that
-corresponds to this record," correlated by a shared key rather than by call
-position. That join, not the SLM, is the next precision fix aimed at the 8 false
-positives and the 1 over-blocked equivalent mutant. It is not a recall fix;
-recall is done on this workload.
+strict `precedence`, the shared-key relational join, `$fromResult` with
+`length: true`, and `expect.outcome.when`.
 
-The first acceptable SLM pilot follows that join. It is non-blocking,
-local-only, and limited to semantic faithfulness of text to structured evidence,
-such as a summary count matching `bugIds`.
+The relational join is no longer future work. It correlated an argument to the
+lookup for the same record by shared key rather than by call position, cleared
+one false positive and the last over-blocked equivalent mutant (`reorder:5`),
+and did not cost a mutant kill. The remaining 7 false positives were
+outcome-shape expectations fixed by asserting properties instead of literals:
+`length: true` ties a reported count to the retrieved set size, and
+`expect.outcome.when` scopes outcome correlation to worlds selected by a
+condition.
+
+The remaining deterministic boundary is not a missing structural relation. It is
+`swap-arg:7:summary`, where a free-text prose summary can be swapped for
+different prose. That is the first acceptable SLM pilot: non-blocking,
+local-only, and limited to semantic faithfulness of text to structured evidence.
 
 If evaluated, SLM findings must be reported as a distinct severity with model id,
 prompt inputs, and raw response. They must not change mutation score or corpus
@@ -292,13 +323,15 @@ The next design-partner conversations should determine:
    regression?
 2. Is the JSONL adapter cost acceptable, or is a native Microsoft Agents SDK,
    WorkIQ, or framework adapter required before evaluation?
-3. Do teams need cross-tool data references before repeated-call fixtures are
-   useful?
+3. Which additional cross-tool data references beyond the shipped shared-key
+   join are required before repeated-call fixtures are useful?
 4. Which identity and approval properties must be independently verified?
 5. Does the buyer sit in the agent product team, platform engineering,
    developer experience, security, or compliance?
 6. Will teams accept a local JSON report, or do they require JUnit, SARIF, HTML,
    or hosted trend reporting?
+7. Do the 98.1% mutation score and 0 false-positive result reproduce across
+   other agents, contracts, and tasks?
 
 ## Decision
 

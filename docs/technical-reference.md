@@ -517,9 +517,12 @@ A correlation that resolves to nothing reports
 that is absent from the producing result is a finding, not a silent skip.
 
 One correlated expectation replaced three `callIndex` pins in the reference
-contract. Measured effect: the mutation score held at 96.7% with no kill lost,
-the false-positive count fell from 8 to 7, and the last remaining over-blocked
-equivalent mutant cleared to zero.
+contract. Measured effect at the time: the mutation score held at 96.7% with no
+kill lost, the false-positive count fell from 8 to 7, and the last remaining
+over-blocked equivalent mutant cleared to zero. Both numbers have moved since —
+the corpus has grown and the remaining false positives have been closed — but
+the shape of that result is the point: precision improved without costing
+recall.
 
 With `sequence`, the expected value is the element `offset` positions after the
 observed value inside the declared domain. This expresses ordering over argument
