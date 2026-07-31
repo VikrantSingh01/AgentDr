@@ -5,7 +5,9 @@ import { fileURLToPath } from "node:url";
 import { runAgentDoctor } from "./graph.js";
 import { initializeScenario } from "./initializer.js";
 import { inspectMcpServer, writeMcpSnapshot } from "./mcp-cli.js";
+import { renderOutputInterface } from "./output-interface.js";
 import { inspectRun, printRunReport } from "./reporter.js";
+import { loadScenario } from "./scenario-loader.js";
 import { VERSION } from "./version.js";
 
 function printHelp(): void {
@@ -14,6 +16,7 @@ function printHelp(): void {
 Usage:
   agentdoctor init [scenario.yml]
   agentdoctor test <scenario.yml> -- <agent command> [arguments]
+  agentdoctor interface <scenario.yml>
   agentdoctor inspect <run.json>
   agentdoctor mcp inspect -- <server command> [arguments]
   agentdoctor mcp snapshot <snapshot.json> -- <server command> [arguments]
@@ -46,6 +49,13 @@ export async function runCli(args: string[]): Promise<0 | 1 | 2 | 3> {
   if (args[0] === "init") {
     const path = await initializeScenario(args[1]);
     console.log(`Created ${path}`);
+    return 0;
+  }
+
+  if (args[0] === "interface") {
+    if (!args[1]) throw new Error("interface requires a scenario path");
+    const { scenario } = await loadScenario(args[1]);
+    process.stdout.write(renderOutputInterface(scenario));
     return 0;
   }
 

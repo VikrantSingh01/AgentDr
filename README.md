@@ -320,10 +320,17 @@ the report contains both findings.
 ```bash
 agentdoctor init agentdoctor.yml
 agentdoctor test agentdoctor.yml -- node my-agent.mjs
+agentdoctor interface agentdoctor.yml
 agentdoctor inspect .agentdoctor/runs/<run>.json
 agentdoctor mcp inspect -- node my-server.mjs
 agentdoctor mcp snapshot tools.json -- node my-server.mjs
 ```
+
+`interface` prints the output shape the contract requires, including the paths
+that conditional obligations, call budgets and `$fromOutcome` references read but
+the schema never declares. Paste it into the agent's prompt: a contract that
+asserts an output shape without publishing it is grading the agent on names it
+was never given.
 
 From this source checkout, use `node dist/src/cli.js` instead of the installed
 `agentdoctor` binary.

@@ -116,6 +116,35 @@ In both scopes, an `after` call with no `before` call anywhere in the run report
 exactly the behaviour the rule exists to prevent: the dependent action ran and
 its prerequisite never happened at all.
 
+## Publishing the output contract
+
+An agent cannot satisfy an output shape it was never shown. In the Copilot
+replay, the agent's report was complete and correct in substance and used its own
+key names — `escalated.bugIds` where the contract wanted `escalatedBugIds`,
+`ringAdvance.to` where it wanted `toRing` — and was failed for vocabulary the
+prompt never disclosed.
+
+`agentdoctor interface <contract>` emits that vocabulary as prompt-ready text:
+
+```
+agentdoctor interface contracts/contract.yml
+```
+
+It collects every path the contract reads out of the final report, which is more
+than the schema states. Conditional obligations read `when.outcomePath`, call
+budgets read `callsMatchOutcome`, and argument expectations read `$fromOutcome`
+references. None of those appear in `expect.outcome.schema` unless someone also
+wrote them there, so the output names the ones that do not:
+
+```
+The schema does not require `escalatedBugIds`, `ringAdvance.fromRing`,
+`ringAdvance.toRing`, so an agent reading the schema alone would not know to
+report them.
+```
+
+That list is also a review signal for the contract itself. A path read but never
+declared is an obligation the contract holds the agent to in private.
+
 ## Finding causality
 
 A contract's `expect.outcome.schema` is its definition of a well-formed report.
