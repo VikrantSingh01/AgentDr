@@ -673,6 +673,44 @@ staying silent: reporting `attempted: true` without the matching call is already
 `outcome.output_subset`. A condition whose path is missing reports
 `tool.condition_unresolved` rather than skipping the assertion it guards.
 
+## Output shape stability
+
+A contract judges one run at a time. That makes an entire defect class invisible:
+a report whose *shape* depends on the run. Three GitHub Copilot runs against an
+identical prompt and identical fixtures produced 23 paths that appeared in some
+runs and not others — the ring advance reported as `ringAdvance` in two runs and
+`rollout.advanceAttempt` in the third, an owner reported as `routed[].owner` then
+`routed[].assignedTo`, the reviewed set as `reviewed.bugs`, `reviewed.bugIds`,
+and `reviewed.untriagedBugs`. Every one of those reports is internally coherent.
+The defect exists only between runs.
+
+`--repeat N` runs the same contract N times and compares the shape of the final
+report across them:
+
+```bash
+agentdoctor test contracts/contract.yml --repeat 3 -- node agent/agent.mjs
+```
+
+```
+Output shape across runs
+  Stable across 3 runs: 18 paths, identical in every run.
+```
+
+Each run keeps its own verdict and the worst exit code wins, so a repeat run is
+never a softer gate than a single one. Instability alone raises the exit code to
+1: it is a defect, but it is not a safety violation.
+
+Two rules keep this from firing on correct behaviour:
+
+- **Array indices are collapsed.** `routed.0.id` and `routed.1.id` both become
+  `routed[].id`, and an element never contributes a path of its own. An agent
+  that handles three records in one run and two in the next is doing its job, not
+  changing its shape.
+- **A run that never reported is excluded, not treated as empty.** Counting a
+  crash as a report with no paths would mark every other path unstable and bury
+  the real failure under noise it caused. Below two reporting runs, the output
+  says stability was not measured rather than claiming it held.
+
 ## Current boundaries
 
 - one JSONL child-agent adapter;

@@ -320,6 +320,7 @@ the report contains both findings.
 ```bash
 agentdoctor init agentdoctor.yml
 agentdoctor test agentdoctor.yml -- node my-agent.mjs
+agentdoctor test agentdoctor.yml --repeat 3 -- node my-agent.mjs
 agentdoctor interface agentdoctor.yml
 agentdoctor inspect .agentdoctor/runs/<run>.json
 agentdoctor mcp inspect -- node my-server.mjs
@@ -331,6 +332,13 @@ that conditional obligations, call budgets and `$fromOutcome` references read bu
 the schema never declares. Paste it into the agent's prompt: a contract that
 asserts an output shape without publishing it is grading the agent on names it
 was never given.
+
+`--repeat N` runs the same contract N times and compares the shape of the final
+report across them. A contract judges one run at a time, so a report whose shape
+depends on the run is invisible to it — three Copilot runs on an identical prompt
+produced 23 paths that appeared in some runs and not others, each report
+internally coherent. Every run keeps its own verdict and the worst exit code
+wins; instability alone raises the exit code to 1.
 
 From this source checkout, use `node dist/src/cli.js` instead of the installed
 `agentdoctor` binary.

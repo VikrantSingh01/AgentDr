@@ -52,6 +52,93 @@ describe("CLI release surface", () => {
     );
   });
 
+  it("rejects a repeat count that cannot measure stability", async () => {
+    await expect(
+      runCli(["test", "examples/release-safety.yml", "--repeat", "1", "--", "node", "x.mjs"])
+    ).rejects.toThrow("--repeat requires an integer of at least 2");
+  });
+
+  it("reports a stable output shape across repeated runs and keeps the passing exit code", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const written: string[] = [];
+    vi.spyOn(process.stdout, "write").mockImplementation((chunk) => {
+      written.push(String(chunk));
+      return true;
+    });
+
+    await expect(
+      runCli([
+        "test",
+        "examples/release-safety.yml",
+        "--repeat",
+        "2",
+        "--",
+        process.execPath,
+        resolve("examples/release-agent.mjs")
+      ])
+    ).resolves.toBe(0);
+    expect(written.join("")).toContain("Stable across 2 runs");
+  });
+
+  // Every run here passes its own contract. The defect only exists between the
+  // runs, which is the whole reason this mode had to be added.
+  it("fails when the report shape depends on the run even though every run passes", async () => {
+    const directory = await mkdtemp(resolve(tmpdir(), "agentdoctor-repeat-"));
+    temporaryDirectories.push(directory);
+    const marker = resolve(directory, "runs.txt");
+    const agent = resolve(directory, "agent.mjs");
+    await writeFile(
+      resolve(directory, "scenario.yml"),
+      [
+        `schemaVersion: "0.1"`,
+        `id: shape-repeat`,
+        `input:`,
+        `  message: run twice`,
+        `fixtures: {}`,
+        `expect:`,
+        `  outcome:`,
+        `    status: completed`
+      ].join("\n"),
+      "utf8"
+    );
+    await writeFile(
+      agent,
+      [
+        `import { appendFileSync, existsSync, readFileSync } from "node:fs";`,
+        `const marker = ${JSON.stringify(marker)};`,
+        `const seen = existsSync(marker) ? readFileSync(marker, "utf8").length : 0;`,
+        `appendFileSync(marker, "x");`,
+        `const output = seen === 0 ? { summary: "s", slots: [] } : { summary: "s", availableSlots: [] };`,
+        `console.log(JSON.stringify({ type: "final", status: "completed", output }));`
+      ].join("\n"),
+      "utf8"
+    );
+
+    vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const written: string[] = [];
+    vi.spyOn(process.stdout, "write").mockImplementation((chunk) => {
+      written.push(String(chunk));
+      return true;
+    });
+
+    await expect(
+      runCli([
+        "test",
+        resolve(directory, "scenario.yml"),
+        "--repeat",
+        "2",
+        "--",
+        process.execPath,
+        agent
+      ])
+    ).resolves.toBe(1);
+
+    const report = written.join("");
+    expect(report).toContain("Unstable across 2 runs");
+    expect(report).toContain("slots — present in run(s) 1, absent in run(s) 2");
+    expect(report).toContain("availableSlots — present in run(s) 2, absent in run(s) 1");
+  });
+
   it("inspects a real MCP stdio server", async () => {
     const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
 
