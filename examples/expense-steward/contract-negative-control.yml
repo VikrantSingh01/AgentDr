@@ -1,0 +1,53 @@
+schemaVersion: "0.1"
+id: expense-steward
+# Written after examples/expense-steward/PROCESS.md and workflow.mjs, against the
+# process description rather than against the implementation. The point of a
+# second domain is to test whether the contract language generalises, so anything
+# it could not express is recorded in GAPS.md instead of being worked around by
+# reshaping the agent.
+input:
+  message: Review this cycle's pending expenses for the department.
+  data:
+    department: Platform Engineering
+    approveEscalations: true
+fixtures:
+  finance.get_policy:
+    $file: fixtures/policy.json
+  finance.list_pending:
+    $file: fixtures/pending.json
+  finance.fetch_receipt:
+    # One case per expense id, each result in its own file, so a corpus world can
+    # flip a single receipt by layering one file over the defaults while the
+    # contract itself is copied verbatim. A corpus case that had to edit the
+    # contract could quietly drift from the contract actually being measured.
+    $cases:
+      - arguments: { expenseId: EXP-1001 }
+        result: { $file: fixtures/receipt-EXP-1001.json }
+      - arguments: { expenseId: EXP-1002 }
+        result: { $file: fixtures/receipt-EXP-1002.json }
+      - arguments: { expenseId: EXP-1003 }
+        result: { $file: fixtures/receipt-EXP-1003.json }
+      - arguments: { expenseId: EXP-1004 }
+        result: { $file: fixtures/receipt-EXP-1004.json }
+      - arguments: { expenseId: EXP-1005 }
+        result: { $file: fixtures/receipt-EXP-1005.json }
+      - arguments: { expenseId: EXP-1006 }
+        result: { $file: fixtures/receipt-EXP-1006.json }
+      - arguments: { expenseId: EXP-1007 }
+        result: { $file: fixtures/receipt-EXP-1007.json }
+      - arguments: { expenseId: EXP-1008 }
+        result: { $file: fixtures/receipt-EXP-1008.json }
+  finance.approve_expense:
+    $file: fixtures/approved.json
+  finance.escalate_expense:
+    $file: fixtures/escalated.json
+  notify.submitter:
+    $file: fixtures/notified.json
+expect:
+  tools:
+    required:
+      - finance.get_policy
+      - finance.list_pending
+    forbidden: []
+  outcome:
+    status: completed

@@ -8,7 +8,13 @@ import { domainRoot, finalOutput, findingIds, runContract, toolCalls } from "./l
 
 const DECISIONS = new Set(["approved", "escalated"]);
 
-const CONTRACT = "contract.yml";
+// The contract is a parameter so the score can be used as a negative control.
+// A corpus of faults that a near-empty contract still scores well against is
+// measuring its own construction, not the contract, and the only way to know
+// which is to point the same mutants at a contract that asserts almost nothing.
+const CONTRACT =
+  process.argv.find((argument) => argument.startsWith("--contract="))?.slice("--contract=".length) ??
+  "contract.yml";
 const only = process.argv.find((argument) => argument.startsWith("--only="))?.slice("--only=".length);
 
 function clone(value) {
@@ -482,8 +488,13 @@ if (overBlocked.length > 0) {
   }
 }
 
+// Named after the contract, so a negative-control run cannot silently overwrite
+// the report for the contract whose score is actually published.
+const REPORT_NAME =
+  CONTRACT === "contract.yml" ? "mutation-report.json" : `mutation-report.${CONTRACT.replace(/\.ya?ml$/, "")}.json`;
+
 writeFileSync(
-  resolve(domainRoot, "mutation-report.json"),
+  resolve(domainRoot, REPORT_NAME),
   `${JSON.stringify(
     {
       generatedAt: new Date().toISOString(),

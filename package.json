@@ -47,6 +47,7 @@
     "expense:demo": "npm run build && node dist/src/cli.js test examples/expense-steward/contract.yml -- node examples/expense-steward/adapter.mjs",
     "expense:mutate": "npm run build && node examples/expense-steward/mutation-harness.mjs",
     "expense:corpus": "npm run build && node examples/expense-steward/false-positive-corpus.mjs",
+    "expense:control": "npm run build && node examples/expense-steward/mutation-harness.mjs --contract=contract-negative-control.yml",
     "expense:measure": "npm run expense:mutate && npm run expense:corpus",
     "check": "npm run build && npm run validate:readme && npm test",
     "prepack": "npm run build",
