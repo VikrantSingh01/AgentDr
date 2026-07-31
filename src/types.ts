@@ -31,6 +31,7 @@ export interface McpConfiguration {
 export interface ResultReference {
   tool: string;
   path: string;
+  callIndex?: number;
   sequence?: unknown[];
   offset?: number;
 }
@@ -67,11 +68,23 @@ export interface Scenario {
       required?: string[];
       forbidden?: string[];
       order?: string[];
+      precedence?: Array<{
+        before: string;
+        after: string;
+      }>;
       maxCalls?: number;
+      budgets?: Array<{
+        tool: string;
+        minCalls?: number;
+        maxCalls?: number;
+        callsMatchOutcome?: string;
+      }>;
       arguments?: Array<{
         tool: string;
+        callIndex?: number;
         match?: Record<string, unknown>;
         schema?: Record<string, unknown>;
+        distinct?: string[];
       }>;
     };
     confirmation?: {

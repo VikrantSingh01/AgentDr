@@ -42,6 +42,83 @@ export function lintScenario(
     }
   }
 
+  const budgets = new Map<string, { minCalls?: number; maxCalls?: number }>();
+  for (const budget of tools?.budgets ?? []) {
+    if (budgets.has(budget.tool)) {
+      errors.push(`Call budget for ${budget.tool} is declared more than once`);
+      continue;
+    }
+    budgets.set(budget.tool, budget);
+
+    if (
+      budget.minCalls !== undefined &&
+      budget.maxCalls !== undefined &&
+      budget.minCalls > budget.maxCalls
+    ) {
+      errors.push(
+        `Call budget for ${budget.tool} is impossible: minimum ${budget.minCalls} exceeds maximum ${budget.maxCalls}`
+      );
+    }
+    if (forbidden.has(budget.tool) && (budget.minCalls ?? 0) > 0) {
+      errors.push(
+        `Forbidden tool ${budget.tool} cannot have a minimum call budget of ${budget.minCalls}`
+      );
+    }
+    if (required.has(budget.tool) && budget.maxCalls === 0) {
+      errors.push(
+        `Required tool ${budget.tool} cannot have a maximum call budget of 0`
+      );
+    }
+    const orderedCalls = (tools?.order ?? []).filter(
+      (tool) => tool === budget.tool
+    ).length;
+    if (budget.maxCalls !== undefined && orderedCalls > budget.maxCalls) {
+      errors.push(
+        `Call budget ${budget.maxCalls} for ${budget.tool} cannot satisfy an order that calls it ${orderedCalls} times`
+      );
+    }
+  }
+
+  const totalMinimum = [...budgets.values()].reduce(
+    (total, budget) => total + (budget.minCalls ?? 0),
+    0
+  );
+  if (tools?.maxCalls !== undefined && totalMinimum > tools.maxCalls) {
+    errors.push(
+      `Per-tool minimum call budgets total ${totalMinimum}, which exceeds the run budget ${tools.maxCalls}`
+    );
+  }
+
+  const precedencePairs = new Set<string>();
+  for (const rule of tools?.precedence ?? []) {
+    if (rule.before === rule.after) {
+      errors.push(
+        `Precedence rule for ${rule.before} cannot order a tool against itself`
+      );
+      continue;
+    }
+    const key = `${rule.before}\u0000${rule.after}`;
+    if (precedencePairs.has(key)) {
+      errors.push(
+        `Precedence rule ${rule.before} before ${rule.after} is declared more than once`
+      );
+      continue;
+    }
+    precedencePairs.add(key);
+    if (precedencePairs.has(`${rule.after}\u0000${rule.before}`)) {
+      errors.push(
+        `Precedence rules require ${rule.before} before ${rule.after} and ${rule.after} before ${rule.before}, which cannot both hold`
+      );
+    }
+    const beforeIndex = (tools?.order ?? []).lastIndexOf(rule.before);
+    const afterIndex = (tools?.order ?? []).indexOf(rule.after);
+    if (beforeIndex !== -1 && afterIndex !== -1 && beforeIndex > afterIndex) {
+      errors.push(
+        `Precedence rule ${rule.before} before ${rule.after} contradicts the declared order`
+      );
+    }
+  }
+
   if (
     scenario.enforcement?.preDispatch &&
     (tools?.forbidden?.length ?? 0) === 0 &&
@@ -73,6 +150,46 @@ export function lintScenario(
 
   const order = tools?.order ?? [];
   for (const argumentExpectation of tools?.arguments ?? []) {
+    if (argumentExpectation.callIndex !== undefined) {
+      if (forbidden.has(argumentExpectation.tool)) {
+        errors.push(
+          `Argument expectation for forbidden tool ${argumentExpectation.tool} targets call index ${argumentExpectation.callIndex}, which can never be observed`
+        );
+      }
+      const ceiling = budgets.get(argumentExpectation.tool)?.maxCalls;
+      if (ceiling !== undefined && argumentExpectation.callIndex >= ceiling) {
+        errors.push(
+          `Argument expectation for ${argumentExpectation.tool} targets call index ${argumentExpectation.callIndex}, which a maximum of ${ceiling} calls can never reach`
+        );
+      }
+      if (argumentExpectation.distinct !== undefined) {
+        errors.push(
+          `Argument expectation for ${argumentExpectation.tool} cannot combine distinct with callIndex, because a single call is trivially unique`
+        );
+      }
+    }
+    if (argumentExpectation.distinct !== undefined) {
+      if (forbidden.has(argumentExpectation.tool)) {
+        errors.push(
+          `Uniqueness expectation for forbidden tool ${argumentExpectation.tool} can never be observed`
+        );
+      }
+      const seenPaths = new Set<string>();
+      for (const path of argumentExpectation.distinct) {
+        if (seenPaths.has(path)) {
+          errors.push(
+            `Uniqueness expectation for ${argumentExpectation.tool} lists argument ${path} more than once`
+          );
+        }
+        seenPaths.add(path);
+      }
+      const ceiling = budgets.get(argumentExpectation.tool)?.maxCalls;
+      if (ceiling !== undefined && ceiling < 2) {
+        errors.push(
+          `Uniqueness expectation for ${argumentExpectation.tool} is vacuous because a maximum of ${ceiling} call(s) can never repeat a value`
+        );
+      }
+    }
     for (const node of collectReferenceNodes(argumentExpectation.match)) {
       const shapeErrors = validateReference(node);
       if (shapeErrors.length > 0) {
@@ -87,6 +204,17 @@ export function lintScenario(
       if (forbidden.has(reference.tool)) {
         errors.push(
           `Argument expectation for ${argumentExpectation.tool} references forbidden tool ${reference.tool}, so it can never resolve`
+        );
+        continue;
+      }
+      const referencedCeiling = budgets.get(reference.tool)?.maxCalls;
+      if (
+        reference.callIndex !== undefined &&
+        referencedCeiling !== undefined &&
+        reference.callIndex >= referencedCeiling
+      ) {
+        errors.push(
+          `Argument expectation for ${argumentExpectation.tool} references ${reference.tool} call index ${reference.callIndex}, which a maximum of ${referencedCeiling} calls can never reach`
         );
         continue;
       }

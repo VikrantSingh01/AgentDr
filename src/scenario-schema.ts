@@ -22,6 +22,7 @@ export const scenarioSchema = {
           properties: {
             tool: { type: "string", minLength: 1 },
             path: { type: "string", minLength: 1 },
+            callIndex: { type: "integer", minimum: 0 },
             sequence: { type: "array", minItems: 1 },
             offset: { type: "integer" }
           },
@@ -178,7 +179,40 @@ export const scenarioSchema = {
             required: { type: "array", uniqueItems: true, items: { type: "string" } },
             forbidden: { type: "array", uniqueItems: true, items: { type: "string" } },
             order: { type: "array", items: { type: "string" } },
+            precedence: {
+              type: "array",
+              minItems: 1,
+              items: {
+                type: "object",
+                additionalProperties: false,
+                required: ["before", "after"],
+                properties: {
+                  before: { type: "string", minLength: 1 },
+                  after: { type: "string", minLength: 1 }
+                }
+              }
+            },
             maxCalls: { type: "integer", minimum: 0 },
+            budgets: {
+              type: "array",
+              minItems: 1,
+              items: {
+                type: "object",
+                additionalProperties: false,
+                required: ["tool"],
+                anyOf: [
+                  { required: ["minCalls"] },
+                  { required: ["maxCalls"] },
+                  { required: ["callsMatchOutcome"] }
+                ],
+                properties: {
+                  tool: { type: "string", minLength: 1 },
+                  minCalls: { type: "integer", minimum: 0 },
+                  maxCalls: { type: "integer", minimum: 0 },
+                  callsMatchOutcome: { type: "string", minLength: 1 }
+                }
+              }
+            },
             arguments: {
               type: "array",
               items: {
@@ -187,6 +221,7 @@ export const scenarioSchema = {
                 required: ["tool"],
                 properties: {
                   tool: { type: "string", minLength: 1 },
+                  callIndex: { type: "integer", minimum: 0 },
                   match: {
                     type: "object",
                     additionalProperties: {
@@ -197,7 +232,12 @@ export const scenarioSchema = {
                       then: { $ref: "#/$defs/resultReference" }
                     }
                   },
-                  schema: { type: "object" }
+                  schema: { type: "object" },
+                  distinct: {
+                    type: "array",
+                    minItems: 1,
+                    items: { type: "string", minLength: 1 }
+                  }
                 }
               }
             }

@@ -264,18 +264,22 @@ See the [fixture contract](examples/agentic-release-contract.yml),
 
 ## What the MVP checks today
 
-- tool selection, order, count, and argument contracts;
+- tool selection, order, and argument contracts;
+- run-wide and per-tool call budgets, including minimum call floors;
+- argument expectations and derived-argument references scoped to a single
+  zero-based call of a tool;
 - one-use, tool-scoped or exact-argument-bound adapter-attested confirmation;
 - optional fail-closed pre-dispatch policy for harness-mediated calls;
 - ordered argument-aware and call-index-aware fixture responses;
 - semantic checks for contradictory policies, unreachable confirmation
-  enforcement, unreachable fixture cases, and impossible call budgets;
+  enforcement, unreachable fixture cases, impossible call budgets, and call
+  selectors no declared budget can reach;
 - structured final outcomes;
 - exact MCP capability and tool-snapshot drift;
 - missing/duplicate tools, errors, timeouts, latency, and result-size budgets;
 - configured report redaction and partial failure evidence.
 
-The repository has **111 deterministic tests across 15 files** and **eight live
+The repository has **140 deterministic tests across 16 files** and **eight live
 MCP test cases**. There is no model judge or hidden-reasoning assertion.
 
 ## Exit codes

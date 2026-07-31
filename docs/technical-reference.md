@@ -32,17 +32,76 @@ published schema is generated at
 Current deterministic assertions include:
 
 - required and forbidden tools;
-- ordered tool subsequences and maximum calls;
-- argument subset and JSON Schema validation;
-- derived argument equality against values observed in earlier tool results;
+- ordered tool subsequences, run-wide maximum calls, and per-tool call floors
+  and ceilings;
+- argument subset and JSON Schema validation, optionally scoped to one call;
+- derived argument equality against values observed in earlier tool results,
+  optionally scoped to one call of the referenced tool;
 - one-use, tool-scoped or exact-argument-bound confirmation before protected calls;
 - optional pre-dispatch enforcement for forbidden and confirmation-protected calls;
-- semantic checks for core policy contradictions, enforcement reachability, and
-  fixture reachability;
+- semantic checks for core policy contradictions, enforcement reachability,
+  budget reachability, and fixture reachability;
 - final status, output subset, and output schema;
 - whole-run duration;
 - MCP capability and tool snapshot drift;
 - MCP tool error, completed-call latency, and serialized result-byte budgets.
+
+## Scoped expectations
+
+Run-wide expectations overfit or under-constrain whenever a tool is called more
+than once. Two selectors narrow them.
+
+`expect.tools.budgets` bounds one tool independently of the run budget. A floor
+catches a deleted call that `required` still considers satisfied, and a ceiling
+catches repetition that a loose run budget would absorb:
+
+```yaml
+expect:
+  tools:
+    maxCalls: 6
+    budgets:
+      - tool: ado.get_area_owner
+        minCalls: 2
+        maxCalls: 2
+      - tool: ado.update_work_item
+        minCalls: 2
+```
+
+`callIndex` selects a single zero-based, per-tool call. It is available on an
+argument expectation and inside `$fromResult`, so both sides of a derived
+argument can be pinned to the same iteration:
+
+```yaml
+expect:
+  tools:
+    arguments:
+      - tool: ado.update_work_item
+        callIndex: 1
+        match:
+          assignedTo:
+            $fromResult:
+              tool: ado.get_area_owner
+              path: owner
+              callIndex: 1
+```
+
+Without the selectors, an argument expectation applies to every call of the tool
+and `$fromResult` matches any earlier result of the referenced tool. That is
+deliberately permissive: when a tool returns different correct answers across
+calls, an unscoped reference cannot distinguish the right answer from the wrong
+one.
+
+Neither selector can pass vacuously. An argument expectation whose `callIndex`
+matches no observed call reports `tool.arguments_call_missing`, and a
+`$fromResult` whose `callIndex` resolves to nothing reports
+`tool.arguments_reference_unresolved`. The linter rejects a selector that a
+declared ceiling can never reach, a floor above its own ceiling, a floor on a
+forbidden tool, a zero ceiling on a required tool, floors that together exceed
+the run budget, and a ceiling the declared order already exceeds.
+
+`tool.min_calls_per_tool` and `tool.arguments_call_missing` are excluded from
+partial-trace evaluation, because a truncated run cannot prove that a later call
+never happened.
 
 ## Fixture replay
 
@@ -264,6 +323,12 @@ argument must equal the referenced value in at least one `tool_result` from
 "the most recent" is deliberate, because an agent may legitimately cache a lookup
 and reuse it after unrelated intervening calls.
 
+That default is permissive when a tool returns a different correct value on each
+call, since any of them satisfies the reference. `callIndex` narrows the
+reference to one zero-based call of the referenced tool, which is what makes
+"the owner assigned on the second update came from the second lookup"
+expressible. See [Scoped expectations](#scoped-expectations).
+
 With `sequence`, the expected value is the element `offset` positions after the
 observed value inside the declared domain. This expresses ordering over argument
 values, which `expect.tools.order` does not: `order` constrains tool names only.
@@ -274,12 +339,14 @@ final output, so an agent that reports one value and dispatches another is
 detected rather than trusted.
 
 A reference that cannot resolve, because the referenced tool was never called
-before the call under test, the path is absent, or the observed value falls
-outside the declared sequence, produces
+before the call under test, the path is absent, the observed value falls outside
+the declared sequence, or a declared `callIndex` selects a call that never
+happened, produces
 `tool.arguments_reference_unresolved`. An observation the harness could not make
 is reported explicitly and is never treated as a pass. Scenario linting rejects a
-reference to a forbidden tool, and a reference whose target the declared `order`
-places later, because neither can ever resolve.
+reference to a forbidden tool, a reference whose target the declared `order`
+places later, and a `callIndex` beyond the referenced tool's declared ceiling,
+because none can ever resolve.
 
 ## Current boundaries
 

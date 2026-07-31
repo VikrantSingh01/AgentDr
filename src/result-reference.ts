@@ -17,7 +17,9 @@ export function isResultReferenceNode(
 }
 
 export function describeReference(reference: ResultReference): string {
-  const base = `${reference.tool}.${reference.path}`;
+  const base = `${reference.tool}${
+    reference.callIndex === undefined ? "" : `[${reference.callIndex}]`
+  }.${reference.path}`;
   if (!reference.sequence) return base;
   return `${base} offset ${reference.offset ?? 1} in declared sequence`;
 }
@@ -34,7 +36,7 @@ export function validateReference(reference: unknown): string[] {
   }
   const candidate = reference as Record<string, unknown>;
   for (const key of Object.keys(candidate)) {
-    if (!["tool", "path", "sequence", "offset"].includes(key)) {
+    if (!["tool", "path", "callIndex", "sequence", "offset"].includes(key)) {
       errors.push(`$fromResult does not support the property ${key}`);
     }
   }
@@ -43,6 +45,11 @@ export function validateReference(reference: unknown): string[] {
   }
   if (typeof candidate.path !== "string" || candidate.path.length === 0) {
     errors.push("$fromResult requires a non-empty result path");
+  }
+  if (candidate.callIndex !== undefined) {
+    if (!Number.isInteger(candidate.callIndex) || (candidate.callIndex as number) < 0) {
+      errors.push("$fromResult callIndex must be a non-negative integer");
+    }
   }
   if (candidate.sequence !== undefined) {
     if (!Array.isArray(candidate.sequence) || candidate.sequence.length === 0) {
@@ -73,6 +80,13 @@ function readPath(source: unknown, path: string): { found: boolean; value: unkno
   return { found: true, value: current };
 }
 
+export function readValueAtPath(
+  source: unknown,
+  path: string
+): { found: boolean; value: unknown } {
+  return readPath(source, path);
+}
+
 export function resolveCandidates(
   reference: ResultReference,
   evidence: EvidenceEvent[],
@@ -80,9 +94,15 @@ export function resolveCandidates(
 ): unknown[] {
   const offset = reference.offset ?? 1;
   const candidates: unknown[] = [];
-  for (const event of evidence) {
-    if (event.type !== "tool_result") continue;
-    if (event.tool !== reference.tool) continue;
+  const results = evidence.filter(
+    (event): event is Extract<EvidenceEvent, { type: "tool_result" }> =>
+      event.type === "tool_result" && event.tool === reference.tool
+  );
+  const scoped =
+    reference.callIndex === undefined
+      ? results
+      : results.slice(reference.callIndex, reference.callIndex + 1);
+  for (const event of scoped) {
     if (event.sequence >= beforeSequence) continue;
     const read = readPath(event.result, reference.path);
     if (!read.found) continue;

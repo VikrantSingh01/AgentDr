@@ -364,4 +364,140 @@ expect:
       findings: []
     });
   });
+
+  describe("call-scoped expectations end to end", () => {
+    const scenario = `
+schemaVersion: "0.1"
+id: scoped-argument-binding
+input:
+  message: Route each bug to the owner of its own area
+fixtures:
+  ado.get_area_owner:
+    $cases:
+      - callIndex: 0
+        result: { owner: android-dri@example.test }
+      - callIndex: 1
+        result: { owner: ios-dri@example.test }
+  ado.update_work_item:
+    updated: true
+expect:
+  tools:
+    required: [ado.get_area_owner, ado.update_work_item]
+    order: [ado.get_area_owner, ado.update_work_item]
+    maxCalls: 6
+    budgets:
+      - tool: ado.get_area_owner
+        minCalls: 2
+        maxCalls: 2
+      - tool: ado.update_work_item
+        minCalls: 2
+        maxCalls: 2
+    arguments:
+      - tool: ado.update_work_item
+        callIndex: 0
+        match:
+          assignedTo:
+            $fromResult: { tool: ado.get_area_owner, path: owner, callIndex: 0 }
+      - tool: ado.update_work_item
+        callIndex: 1
+        match:
+          assignedTo:
+            $fromResult: { tool: ado.get_area_owner, path: owner, callIndex: 1 }
+  outcome:
+    status: completed
+`;
+
+    function agentSource({
+      reusesFirstOwner = false,
+      skipsSecondUpdate = false
+    }): string {
+      return `
+        const { createInterface } = await import("node:readline");
+        const owners = [];
+        const emit = (event) => process.stdout.write(JSON.stringify(event) + "\\n");
+        const call = (callId, tool, args) =>
+          emit({ type: "tool_call", callId, tool, arguments: args });
+        const input = createInterface({ input: process.stdin });
+        input.on("line", (line) => {
+          const event = JSON.parse(line);
+          if (event.type === "run_start") {
+            call("l1", "ado.get_area_owner", { area: "Android" });
+            return;
+          }
+          if (event.type !== "tool_result") return;
+          if (event.callId === "l1") {
+            owners.push(event.result.owner);
+            call("u1", "ado.update_work_item", {
+              id: "BUG-1",
+              assignedTo: owners[0]
+            });
+          } else if (event.callId === "u1") {
+            call("l2", "ado.get_area_owner", { area: "iOS" });
+          } else if (event.callId === "l2") {
+            owners.push(event.result.owner);
+            if (${String(skipsSecondUpdate)}) {
+              emit({ type: "final", status: "completed" });
+              input.close();
+              return;
+            }
+            call("u2", "ado.update_work_item", {
+              id: "BUG-2",
+              assignedTo: ${reusesFirstOwner ? "owners[0]" : "owners[1]"}
+            });
+          } else if (event.callId === "u2") {
+            emit({ type: "final", status: "completed" });
+            input.close();
+          }
+        });
+      `;
+    }
+
+    async function runScoped(source: string) {
+      const directory = await mkdtemp(resolve(tmpdir(), "agentdoctor-scoped-"));
+      temporaryDirectories.push(directory);
+      const scenarioPath = resolve(directory, "scenario.yml");
+      await writeFile(scenarioPath, scenario, "utf8");
+
+      return runAgentDoctor({
+        scenarioPath,
+        command: [process.execPath, "--input-type=module", "--eval", source],
+        outputDirectory: resolve(directory, "runs")
+      });
+    }
+
+    it("passes when each update uses the owner from its own lookup", async () => {
+      const completed = await runScoped(agentSource({}));
+
+      expect(completed.report.decision).toMatchObject({
+        status: "passed",
+        exitCode: 0,
+        findings: []
+      });
+    });
+
+    it("catches an update that reuses the first lookup's owner", async () => {
+      const completed = await runScoped(
+        agentSource({ reusesFirstOwner: true })
+      );
+
+      expect(completed.report.decision.exitCode).toBe(1);
+      expect(completed.report.decision.findings).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ id: "tool.arguments_subset" })
+        ])
+      );
+    });
+
+    it("catches a deleted update that the required-tool list still satisfies", async () => {
+      const completed = await runScoped(
+        agentSource({ skipsSecondUpdate: true })
+      );
+
+      const findings = completed.report.decision.findings.map(
+        (finding) => finding.id
+      );
+      expect(findings).toContain("tool.min_calls_per_tool");
+      expect(findings).not.toContain("tool.required");
+    });
+  });
 });
