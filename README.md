@@ -275,7 +275,7 @@ See the [fixture contract](examples/agentic-release-contract.yml),
 - missing/duplicate tools, errors, timeouts, latency, and result-size budgets;
 - configured report redaction and partial failure evidence.
 
-The repository has **107 deterministic tests across 14 files** and **eight live
+The repository has **111 deterministic tests across 15 files** and **eight live
 MCP test cases**. There is no model judge or hidden-reasoning assertion.
 
 ## Exit codes
@@ -302,6 +302,43 @@ agentdoctor mcp snapshot tools.json -- node my-server.mjs
 
 From this source checkout, use `node dist/src/cli.js` instead of the installed
 `agentdoctor` binary.
+
+## MCP server
+
+Agent Doctor also ships a local stdio MCP server so an MCP client can invoke the
+Agent Doctor CLI as deterministic tools. This lets a client run Agent Doctor. It
+does not make Agent Doctor test the client's own agent or replace that client's
+tool dispatcher.
+
+Start the server from this source checkout:
+
+```bash
+node dist/src/mcp-bin.js
+```
+
+Example MCP client configuration:
+
+```json
+{
+  "mcpServers": {
+    "agentdoctor": {
+      "command": "node",
+      "args": ["C:\\path\\to\\AgentDr\\dist\\src\\mcp-bin.js"]
+    }
+  }
+}
+```
+
+The server exposes two tools:
+
+| Tool | Purpose |
+|---|---|
+| `run_contract` | Runs `agentdoctor test <scenario> -- <agent command...>` with the agent command supplied as an array of strings. It returns the exact exit code, exit meaning, findings, tool call count, and evidence path. |
+| `explain_report` | Reads an existing JSON report and returns the recorded decision, findings, tool calls, and lifecycle evidence without model judgement. |
+
+`run_contract` preserves Agent Doctor exit meanings: `0` pass, `1` contract
+failure, `2` runtime error, and `3` safety or pre-dispatch denial. Stdout is
+reserved for MCP JSON-RPC. Server diagnostics go to stderr.
 
 ## Evidence and privacy
 

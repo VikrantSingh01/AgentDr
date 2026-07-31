@@ -20,7 +20,8 @@
   ],
   "type": "module",
   "bin": {
-    "agentdoctor": "dist/src/cli.js"
+    "agentdoctor": "dist/src/cli.js",
+    "agentdoctor-mcp": "dist/src/mcp-bin.js"
   },
   "files": [
     "dist",
@@ -42,7 +43,8 @@
     "demo": "node dist/src/cli.js test examples/agentic-release-contract.yml -- node examples/agentic-release-assistant.mjs",
     "demo:mcp": "node dist/src/cli.js test examples/mcp-release-contract.yml",
     "check": "npm run build && npm run validate:readme && npm test",
-    "prepack": "npm run build"
+    "prepack": "npm run build",
+    "prepare": "npm run build"
   },
   "engines": {
     "node": ">=20"
