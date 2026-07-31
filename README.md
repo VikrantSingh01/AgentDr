@@ -114,6 +114,38 @@ another policy boundary.
 | Denial is a lifecycle state | Reports distinguish an attempted call from a dispatched side effect |
 | Redaction happens before persistence | Raw evidence drives evaluation; configured sensitive values are sanitized before reports are written |
 
+## One action contract across SLM, frontier, and hybrid agents
+
+Agent Doctor evaluates observable actions rather than hidden model reasoning.
+That makes the same scenario reusable when a team changes its model, prompt,
+quantization, router, or deployment location.
+
+A hybrid agent might use a local small language model (SLM) for classification,
+extraction, and routine planning, then escalate ambiguous or consequential work
+to a larger cloud model. Each route can produce fluent output while silently
+changing tool choice, arguments, approval behavior, call count, or latency.
+Agent Doctor keeps the release invariants stable across those configurations.
+
+| Model change | Contract evidence |
+|---|---|
+| Frontier model to SLM | Required tools, argument shape, order, outcome, and budgets still pass |
+| SLM quantization or version update | The same action workflow remains within its tested capability envelope |
+| Local-first hybrid routing | Local and cloud configurations are exercised against the same scenarios |
+| SLM-to-LLM escalation | Downstream actions still require the expected tools and confirmation |
+| Model or network fallback | The degraded path ends safely without an unintended mutation |
+| Cost-oriented model substitution | Call-count, duration, and MCP result-size budgets remain bounded |
+
+This supports evidence-based model placement: teams can identify workflows an
+SLM handles reliably, workflows that need escalation, and changes that preserve
+the action contract even when the generated prose differs.
+
+The current protocol does not automatically observe an internal model router or
+prove that data stayed on a particular device or cloud boundary. Test those
+properties by running explicit adapter configurations and, when routing itself
+must be asserted, expose the route as protocol-mediated observable evidence.
+Agent Doctor then verifies the resulting actions; semantic answer quality still
+belongs in a complementary evaluation system.
+
 ## Adopt incrementally
 
 1. **Replay one workflow locally.** Wrap the agent in the JSONL adapter and use
@@ -295,6 +327,8 @@ from untrusted sources only inside an appropriately isolated environment.
   this path does not exercise a child agent's own native MCP client stack;
 - one child adapter, one local MCP stdio server, and sequential calls;
 - structural checks, not chain-of-thought inspection or automatic truth judging;
+- model-independent action checks, not automatic observation of an internal
+  model router, device boundary, or model-quality ranking;
 - strict snapshot drift detection, not compatibility certification;
 - configured key-based redaction is not general DLP;
 - semantic linting covers core contradictions, enforcement reachability, and
