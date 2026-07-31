@@ -393,6 +393,7 @@ def assert_architecture_layout(draw):
         ("recorder", (652, 394, 880, 548), "harness"),
         ("evaluator", (898, 342, 1268, 704), "harness"),
         ("verdict", (1332, 386, 1718, 548), None),
+        ("crossrun", (1332, 592, 1718, 748), None),
         ("policy", (346, 610, 612, 720), "harness"),
         ("backends", (652, 592, 850, 730), "harness"),
         ("backend-fixtures", (674, 646, 828, 676), "backends"),
@@ -478,6 +479,23 @@ def assert_architecture_layout(draw):
             "ma",
         ),
         ("verdict-exit", "exit 0 / 1 / 2 / 3", MONO_BOLD, (1525, 500), "verdict", "ma"),
+        ("crossrun-title", "Cross-run check", BODY_BOLD, (1525, 614), "crossrun", "ma"),
+        (
+            "crossrun-subtitle",
+            wrapped_for("crossrun", "--repeat N compares report shape across identical runs"),
+            SMALL,
+            (1525, 650),
+            "crossrun",
+            "ma",
+        ),
+        (
+            "crossrun-note",
+            wrapped_for("crossrun", "A per-run contract cannot see this."),
+            SMALL_BOLD,
+            (1525, 714),
+            "crossrun",
+            "ma",
+        ),
         ("policy-title", "Dispatch policy", BODY_BOLD, (479, 628), "policy", "ma"),
         (
             "policy-subtitle",
@@ -697,6 +715,24 @@ def render_architecture():
         GREEN,
     )
     write(draw, (1525, 500), "exit 0 / 1 / 2 / 3", MONO_BOLD, NAVY, anchor="ma")
+
+    node(
+        draw,
+        (1332, 592, 1718, 748),
+        "Cross-run check",
+        "--repeat N compares report shape across identical runs",
+        GREEN_LIGHT,
+        GREEN,
+    )
+    write(
+        draw,
+        (1525, 714),
+        "A per-run contract cannot see this.",
+        SMALL_BOLD,
+        NAVY,
+        anchor="ma",
+    )
+    arrow(draw, (1525, 548), (1525, 592), GREEN)
 
     arrow(draw, (292, 443), (346, 443))
     arrow(draw, (612, 474), (652, 474))
