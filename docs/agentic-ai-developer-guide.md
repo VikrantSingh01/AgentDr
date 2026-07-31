@@ -26,6 +26,22 @@ The more useful questions are structural:
 
 These are observable action contracts. They avoid claims about hidden reasoning and focus on behavior available at process and protocol boundaries.
 
+## The Deterministic Core, and the Future Local SLM Edge
+
+Agent Doctor's core deliberately has no model judge. Current assertions are structural checks over recorded evidence: tool presence, ordering, strict precedence, call budgets, call counts tied to outcome arrays, argument subset and schema matching, call-indexed arguments, argument distinctness, `$fromResult` references, call-indexed `$fromResult`, confirmation binding, outcome shape, duration, MCP errors, latency, and result size. They run offline, cost nothing per run, produce stable exit codes, and cite the evidence that failed. That is why they can be used as a regression gate.
+
+The reference `em-triage-steward` agent shows both the value and the current limits of that approach. The final cycle measurement is 96.7% mutation score (29 killed, 1 survivor), 1 survivor, 8 of 11 false-positive worlds (72.7%), and 1 over-blocked behaviour-preserving mutant (`reorder:5`). Publish those numbers together: the absolute false-positive count went 7 -> 9 -> 8, so it rose before it fell, and 8 of 11 remains poor.
+
+The new constructs are `expect.tools.arguments[].callIndex`, `$fromResult.callIndex`, `expect.tools.budgets[]`, `expect.tools.budgets[].callsMatchOutcome`, `expect.tools.arguments[].distinct`, and `expect.tools.precedence`. They let a contract scope an assertion to a specific call, tie a tool's call count to an array the agent reported, require argument uniqueness without naming values, and express precedence that subsequence order cannot.
+
+The mutation denominator now excludes 4 invalid mutants and 4 behaviour-preserving mutants. Excluding behaviour-preserving mutants is not score inflation: a mutant that produces a byte-identical outcome through an identical multiset of tool calls should survive, and counting it as a miss would reward an over-strict contract. The harness proves equivalence by hashing the outcome and call multiset against a live baseline run. Removing the global `maxCalls` ceiling, the total-order `order` list, and the `update -> escalation` precedence rule reduced over-blocking without losing a mutant kill.
+
+The empirical boundary is now sharp. Once the deterministic layer can scope an assertion to a call, to a count, and to the data, it catches every structural defect in this workload: dropped calls, wrong ids, wrong arguments, unresolved references, stale results, missing confirmation, and bad ordering. The single surviving defect is `swap-arg:7:summary`, where a free-text escalation summary changed and no structural assertion could tell whether the new prose remained faithful to the recorded facts. The residual is not large, and it is not structural. It is natural-language prose that must be faithful to structured evidence already in the report, such as a summary count matching `bugIds`, a rollout justification naming the ring actually advanced, or an outbound message staying within a policy tone.
+
+The planned edge is a locally hosted SLM, not a frontier-model judge. The model would receive the structured evidence and the text, then answer a closed consistency question. That is a grounded classification task suitable for a 1B-7B class model. ONNX Runtime, llama.cpp, Foundry Local, and Phi-class models are examples; the assertion interface should stay model-agnostic. Local execution preserves zero egress for production-shaped traces, and the check should run only for assertions that opt in.
+
+Contain it tightly: deterministic evaluation runs first and remains authoritative; no SLM verdict can suppress or downgrade a deterministic finding; SLM findings are advisory by default; promotion to blocking is explicit per contract; every verdict records model id, prompt inputs, and raw response; findings use a distinct severity; and mutation score plus corpus false-positive rate exclude SLM findings unless an experiment explicitly opts them in. If no model is available, report `not_evaluated`, never a silent pass. This SLM layer is designed, not shipped. The deterministic construct that comes first is a relational join: being able to say "this argument must equal the result of the lookup that corresponds to this record," correlated by shared key rather than by call position. That is a precision fix aimed at the 8 false positives and the 1 over-blocked equivalent mutant, not a recall fix; recall is done on this workload. The SLM layer follows it.
+
 ## Make the Action Contract Executable
 
 Agent Doctor scenarios are YAML or JSON validated against a published schema. A contract can require tools, constrain order and arguments, protect mutations, match structured outcomes, and impose performance limits. The repository's MCP release scenario can be reduced to this representative fragment:
@@ -249,9 +265,9 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 The JSON report remains the diagnostic source of truth. Terminal output names each finding and its evidence sequence, and GitHub Actions receives annotations when that environment is detected. In GitHub Actions, the human-readable finding line renders carriage returns and line feeds as the visible sequences `\r` and `\n`, while the annotation escapes `%` as `%25`, carriage return as `%0D`, and line feed as `%0A`. Both output paths therefore keep a multiline finding from opening a second workflow-command line.
 
-## What 107 Tests Across 14 Files Actually Demonstrate
+## What the Current Test Suite Actually Demonstrates
 
-The current suite contains exactly 107 tests across 14 files. Its value is not the number; it is the range of deliberately hostile conditions around the contract boundary.
+The current README reports 140 deterministic tests across 16 files. Its value is not the number; it is the range of deliberately hostile conditions around the contract boundary.
 
 The tests reject invalid JSONL, array arguments, duplicate call IDs, output after `final`, a final event racing an asynchronous result, inherited fixture properties, nonzero child exits, and invalid report files. They verify forced termination after ignored graceful shutdown, including POSIX process-group descendants, and preserve exit `3` when an observed critical violation is followed by a crash. Scenario tests cover inline, file, argument-aware, and call-index-aware fixtures; reject duplicate or unreachable selectors and contradictory policies; validate Draft 2020-12 schemas; and reject reserved redaction keys that would corrupt policy or event structure.
 
@@ -287,6 +303,10 @@ The strongest signal is retention. Do teams keep the check after the pilot, main
 - Terminate failed agents gracefully and then forcibly; use process-group signaling where the platform implementation supports it.
 - Reserve distinct exit codes for quality, runtime, and critical safety failures, without letting a later crash downgrade an observed critical finding.
 - Add adversarial tests for malformed events, races, timeouts, errors, drift, and leaks.
+- Publish mutation score and absolute false-positive count together; the latest measured state is 96.7% mutation score (29 killed, 1 survivor), 8 of 11 false-positive worlds (72.7%), and 1 over-blocked behaviour-preserving mutant (`reorder:5`).
+- Keep any future SLM assertion opt-in, local, grounded, reported with its own
+  severity, and excluded from deterministic headline metrics unless explicitly
+  included.
 - State what local tests cannot establish about models, networks, authentication, and users.
 - Measure adoption through retained PR checks and real catches, not attention metrics.
 

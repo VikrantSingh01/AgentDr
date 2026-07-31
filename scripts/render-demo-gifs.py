@@ -13,6 +13,13 @@ PADDING = 44
 LINE_HEIGHT = 27
 MAX_LINES = 18
 TEXT_WIDTH = WIDTH - (PADDING * 2)
+HEADER_TITLE_X = 150
+HEADER_TITLE_Y = 39
+HEADER_SUBTITLE_Y = 42
+HEADER_RIGHT_X = WIDTH - PADDING
+HEADER_GAP = 28
+SUBTITLE_MAX_FONT_SIZE = 17
+SUBTITLE_MIN_FONT_SIZE = 12
 BACKGROUND = "#10151c"
 CHROME = "#1c2530"
 TEXT = "#d9e2ec"
@@ -39,7 +46,6 @@ def font(size: int, bold: bool = False):
 
 BODY_FONT = font(21)
 TITLE_FONT = font(22, bold=True)
-SMALL_FONT = font(17)
 
 
 def color_for(line: str):
@@ -91,6 +97,90 @@ def wrap_lines(lines: list[str]):
     return [wrapped for line in lines for wrapped in wrap_line(measure, line)]
 
 
+def text_width(draw: ImageDraw.ImageDraw, text: str, text_font):
+    left, _, right, _ = draw.textbbox((0, 0), text, font=text_font)
+    return right - left
+
+
+def ellipsize(draw: ImageDraw.ImageDraw, text: str, text_font, max_width: int):
+    ellipsis = "…"
+    if text_width(draw, ellipsis, text_font) > max_width:
+        raise ValueError("Header subtitle has no drawable space")
+    if text_width(draw, text, text_font) <= max_width:
+        return text
+    low = 0
+    high = len(text)
+    while low < high:
+        mid = (low + high + 1) // 2
+        candidate = f"{text[:mid].rstrip()}{ellipsis}"
+        if text_width(draw, candidate, text_font) <= max_width:
+            low = mid
+        else:
+            high = mid - 1
+    return f"{text[:low].rstrip()}{ellipsis}"
+
+
+def fit_subtitle(draw: ImageDraw.ImageDraw, subtitle: str, max_width: int):
+    for size in range(SUBTITLE_MAX_FONT_SIZE, SUBTITLE_MIN_FONT_SIZE - 1, -1):
+        subtitle_font = font(size)
+        if text_width(draw, subtitle, subtitle_font) <= max_width:
+            return subtitle, subtitle_font
+    subtitle_font = font(SUBTITLE_MIN_FONT_SIZE)
+    return ellipsize(draw, subtitle, subtitle_font, max_width), subtitle_font
+
+
+def checked_text(
+    draw: ImageDraw.ImageDraw,
+    xy: tuple[int, int],
+    text: str,
+    text_font,
+    fill: str,
+    label: str,
+    min_x: int = 0,
+    max_x: int = WIDTH,
+    min_y: int = 0,
+    max_y: int = HEIGHT,
+):
+    bbox = draw.textbbox(xy, text, font=text_font)
+    if bbox[0] < min_x or bbox[1] < min_y or bbox[2] > max_x or bbox[3] > max_y:
+        raise ValueError(f"{label} text would render outside bounds: {bbox}")
+    draw.text(xy, text, font=text_font, fill=fill)
+    return bbox
+
+
+def draw_header(draw: ImageDraw.ImageDraw, title: str, subtitle: str):
+    title_bbox = checked_text(
+        draw,
+        (HEADER_TITLE_X, HEADER_TITLE_Y),
+        title,
+        TITLE_FONT,
+        TEXT,
+        "title",
+        max_x=HEADER_RIGHT_X,
+    )
+    subtitle_left_limit = title_bbox[2] + HEADER_GAP
+    max_subtitle_width = HEADER_RIGHT_X - subtitle_left_limit
+    if max_subtitle_width <= 0:
+        raise ValueError("Header title leaves no room for subtitle")
+    fitted_subtitle, subtitle_font = fit_subtitle(draw, subtitle, max_subtitle_width)
+    subtitle_bbox_at_origin = draw.textbbox((0, 0), fitted_subtitle, font=subtitle_font)
+    subtitle_x = HEADER_RIGHT_X - subtitle_bbox_at_origin[2]
+    checked_text(
+        draw,
+        (subtitle_x, HEADER_SUBTITLE_Y),
+        fitted_subtitle,
+        subtitle_font,
+        MUTED,
+        "subtitle",
+        min_x=subtitle_left_limit,
+        max_x=HEADER_RIGHT_X,
+    )
+
+
+def animation_step(line_count: int):
+    return 2 if line_count > 14 else 1
+
+
 def draw_frame(title: str, subtitle: str, visible_lines: list[str], cursor: bool):
     image = Image.new("RGB", (WIDTH, HEIGHT), BACKGROUND)
     draw = ImageDraw.Draw(image)
@@ -98,14 +188,21 @@ def draw_frame(title: str, subtitle: str, visible_lines: list[str], cursor: bool
     for index, dot_color in enumerate((RED, YELLOW, GREEN)):
         x = 48 + index * 28
         draw.ellipse((x, 43, x + 15, 58), fill=dot_color)
-    draw.text((150, 39), title, font=TITLE_FONT, fill=TEXT)
-    draw.text((WIDTH - 315, 42), subtitle, font=SMALL_FONT, fill=MUTED)
+    draw_header(draw, title, subtitle)
     draw.line((38, 78, WIDTH - 38, 78), fill="#344253", width=1)
 
     lines = visible_lines[-MAX_LINES:]
     y = 102
     for line in lines:
-        draw.text((PADDING, y), line, font=BODY_FONT, fill=color_for(line))
+        checked_text(
+            draw,
+            (PADDING, y),
+            line,
+            BODY_FONT,
+            color_for(line),
+            "body",
+            max_x=WIDTH - PADDING,
+        )
         y += LINE_HEIGHT
     if cursor:
         draw.rectangle((PADDING, min(y + 2, HEIGHT - 52), PADDING + 12, min(y + 23, HEIGHT - 31)), fill=GREEN)
@@ -119,19 +216,18 @@ def render(input_path: Path, output_path: Path, title: str, subtitle: str):
     frames = []
     durations = []
     visible = []
-    for line in lines:
+    step = animation_step(len(lines))
+    pending_duration = 0
+    for index, line in enumerate(lines, start=1):
         visible.append(line)
-        frames.append(draw_frame(title, subtitle, visible, True))
-        durations.append(460 if line else 180)
+        pending_duration += 460 if line else 180
+        if index % step == 0 or index == len(lines):
+            frames.append(draw_frame(title, subtitle, visible, True))
+            durations.append(pending_duration)
+            pending_duration = 0
     final_frame = draw_frame(title, subtitle, visible, False)
-    frames.extend(
-        [
-            draw_frame(title, subtitle, visible, True),
-            final_frame,
-            draw_frame(title, subtitle, visible, True),
-        ]
-    )
-    durations.extend([900, 300, 3000])
+    frames.append(final_frame)
+    durations.append(3000)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     frames[0].save(
         output_path,

@@ -18,10 +18,38 @@ The current release proves that one local contract can:
 - preserve partial evidence and return stable CI exit codes;
 - sanitize configured sensitive values before report persistence.
 
-The repository currently passes 107 deterministic tests across 14 files and eight
+The current README reports 140 deterministic tests across 16 files and eight
 live MCP cases. Those results prove implementation quality. They do not prove
 that external teams have a recurring problem, can onboard independently, will
 retain scenarios, or will pay.
+
+The first reference-agent measurement is intentionally harsher. The
+`em-triage-steward` contract is measured adversarially two ways, across the full
+cycle:
+
+| Metric | Start of cycle | End of cycle |
+|---|---:|---:|
+| Mutation score | 58.8% (20 killed / 34 scorable) | **96.7% (29 killed, 1 survivor)** |
+| Survivors | 14 | **1** |
+| False positives | 7 of 8 worlds (87.5%) | **8 of 11 worlds (72.7%)** |
+| Over-blocked behaviour-preserving mutants | not measured | **1** (`reorder:5`) |
+
+The absolute false-positive count matters more than the rate alone. Across the
+cycle it went 7 -> 9 -> 8: it rose before it fell, and 8 of 11 is still a poor
+false-positive result. The instrument is sharp at catching real defects and
+still too blunt at tolerating legitimate variation.
+
+The mutation denominator now excludes 4 invalid mutants and 4
+behaviour-preserving ones. Excluding behaviour-preserving mutants is not score
+inflation: a mutant that produces a byte-identical outcome via an identical
+multiset of tool calls should survive, and counting it as a miss would reward an
+over-strict contract. The harness proves equivalence by hashing the outcome and
+call multiset against a live baseline run, rather than trusting a label.
+
+This is the PMF trade-off to test: recall is done on this workload, but
+precision is not. Removing the global `maxCalls` ceiling, the total-order
+`order` list, and the `update -> escalation` precedence rule reduced
+over-blocking without losing a mutant kill.
 
 ## Beachhead Hypothesis
 
@@ -74,6 +102,8 @@ infrastructure.
 - hand-written integration tests around each agent;
 - prompt snapshots and exact-text assertions;
 - hosted evaluation suites that require trace upload;
+- pure LLM-judge gates that are non-reproducible and expensive per run;
+- pure static checks that cannot see semantic drift in grounded free-text payloads;
 - manually running MCP Inspector after changes;
 - approval logic embedded only in prompts or application conditionals;
 - production monitoring that finds the failure after deployment.
@@ -81,6 +111,17 @@ infrastructure.
 Agent Doctor must be materially faster to author, review, and diagnose than
 these alternatives. Portability and deterministic output are not sufficient if
 scenario maintenance is expensive.
+
+The differentiated product hypothesis is hybrid but contained: deterministic
+checks now carry almost all assertion volume at near-zero marginal cost, while a
+future local SLM handles only the measured residual semantic edge case that opts
+in. Once the deterministic layer can scope an assertion to a call, to a count,
+and to the data, it catches every structural defect in this workload. The single
+surviving defect is `swap-arg:7:summary`, a free-text escalation summary swapped
+for different prose. That edge must be local for zero egress and compliance,
+grounded in existing evidence, advisory by default, auditable in the report, and
+excluded from the headline mutation and false-positive metrics unless explicitly
+included.
 
 ## Product Boundaries To Test In Interviews
 
@@ -123,6 +164,8 @@ Ask about the last incident, not desired features:
 11. Does the workflow repeat a tool with different arguments or use data from
     one tool in another?
 12. What would make the team remove the check after two weeks?
+13. Which natural-language payloads must be semantically faithful to structured
+    evidence, and would the team accept a local-only advisory SLM check for them?
 
 Do not demo Agent Doctor until the incident timeline, current workaround,
 frequency, and owner are understood.
@@ -173,6 +216,28 @@ gate enabled.
 5. Identify the budget owner and purchasing path.
 
 Exit criterion: retained use plus explicit commercial intent.
+
+## SLM edge validation rule
+
+Do not add a model to improve-looking metrics before the next deterministic
+contract is fixed. The SLM layer is designed, not shipped. The vocabulary gaps
+from the previous review are now largely closed by call-indexed arguments,
+call-indexed `$fromResult`, per-tool budgets, `callsMatchOutcome`, `distinct`,
+and strict `precedence`. The remaining deterministic gap is a relational join:
+being able to say "this argument must equal the result of the lookup that
+corresponds to this record," correlated by a shared key rather than by call
+position. That join, not the SLM, is the next precision fix aimed at the 8 false
+positives and the 1 over-blocked equivalent mutant. It is not a recall fix;
+recall is done on this workload.
+
+The first acceptable SLM pilot follows that join. It is non-blocking,
+local-only, and limited to semantic faithfulness of text to structured evidence,
+such as a summary count matching `bugIds`.
+
+If evaluated, SLM findings must be reported as a distinct severity with model id,
+prompt inputs, and raw response. They must not change mutation score or corpus
+false-positive rate unless the experiment explicitly opts those metrics in, and
+no-model availability must report `not_evaluated` rather than pass.
 
 ## Scorecard
 

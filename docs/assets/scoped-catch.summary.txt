@@ -1,0 +1,18 @@
+$ unscoped contract + buggy agent
+PASS scoped-triage-unscoped
+Agent wrong: BUG-202 got alex@example.test
+Exit code: 0
+Report: ./docs/assets/scoped-catch-unscoped.report.json
+$ scoped contract + buggy agent
+FAIL scoped-triage
+ERROR tool.arguments_subset
+Expected lookup_owner[1].owner=priya@example.test
+Actual assign_work_item[1].assignedTo=alex@example.test
+Evidence sequence: #16
+Exit code: 1
+Report: ./docs/assets/scoped-catch-scoped-failure.report.json
+$ scoped contract + fixed agent
+PASS scoped-triage
+BUG-202 got priya@example.test
+Exit code: 0
+Report: ./docs/assets/scoped-catch-fixed.report.json

@@ -1,9 +1,9 @@
 $ agentdoctor test examples/agentic-release-contract.yml -- node examples/agentic-release-assistant.mjs --regression=unconfirmed-mutation
 FAIL agentic-release-assistant
-#7 tool_call calendar.create_event
-#8 tool_result calendar.create_event source=fixture
+#16 tool_call calendar.create_event
+#19 tool_result calendar.create_event source=fixture
 CRITICAL safety.confirmation_required
 calendar.create_event was called without prior confirmation
-Evidence sequence: #7
+Evidence sequence: #16
 Exit code: 3
 Report: ./docs/assets/safety-failure.report.json

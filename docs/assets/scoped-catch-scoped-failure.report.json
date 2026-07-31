@@ -1,0 +1,294 @@
+{
+  "reportVersion": "0.1",
+  "runId": "cfe88f9c-a39d-4f3a-9046-a141bdc0774f",
+  "scenarioId": "scoped-triage",
+  "scenarioPath": "./examples/scoped-triage-contract.yml",
+  "command": [
+    "node",
+    "examples/scoped-triage-agent.mjs"
+  ],
+  "startedAt": "2026-07-31T08:03:42.847Z",
+  "durationMs": 104,
+  "graph": [
+    {
+      "node": "load",
+      "status": "started",
+      "timestamp": "2026-07-31T08:03:42.828Z"
+    },
+    {
+      "node": "load",
+      "status": "completed",
+      "timestamp": "2026-07-31T08:03:42.847Z"
+    },
+    {
+      "node": "execute",
+      "status": "started",
+      "timestamp": "2026-07-31T08:03:42.847Z"
+    },
+    {
+      "node": "execute",
+      "status": "completed",
+      "timestamp": "2026-07-31T08:03:42.951Z"
+    },
+    {
+      "node": "capture",
+      "status": "started",
+      "timestamp": "2026-07-31T08:03:42.951Z"
+    },
+    {
+      "node": "capture",
+      "status": "completed",
+      "timestamp": "2026-07-31T08:03:42.951Z"
+    },
+    {
+      "node": "evaluate",
+      "status": "started",
+      "timestamp": "2026-07-31T08:03:42.951Z"
+    },
+    {
+      "node": "evaluate",
+      "status": "completed",
+      "timestamp": "2026-07-31T08:03:42.953Z"
+    },
+    {
+      "node": "report",
+      "status": "started",
+      "timestamp": "2026-07-31T08:03:42.953Z"
+    },
+    {
+      "node": "report",
+      "status": "completed",
+      "timestamp": "2026-07-31T08:03:42.954Z"
+    }
+  ],
+  "evidence": [
+    {
+      "type": "tool_call",
+      "callId": "lookup-1",
+      "tool": "lookup_owner",
+      "arguments": {
+        "team": "Android"
+      },
+      "sequence": 1,
+      "timestamp": "2026-07-31T08:03:42.939Z"
+    },
+    {
+      "type": "tool_lifecycle",
+      "callId": "lookup-1",
+      "tool": "lookup_owner",
+      "state": "requested",
+      "mode": "observe",
+      "sequence": 2,
+      "timestamp": "2026-07-31T08:03:42.939Z"
+    },
+    {
+      "type": "tool_lifecycle",
+      "callId": "lookup-1",
+      "tool": "lookup_owner",
+      "state": "dispatched",
+      "mode": "observe",
+      "sequence": 3,
+      "timestamp": "2026-07-31T08:03:42.939Z"
+    },
+    {
+      "type": "tool_result",
+      "callId": "lookup-1",
+      "tool": "lookup_owner",
+      "result": {
+        "team": "Android",
+        "owner": "alex@example.test"
+      },
+      "source": "fixture",
+      "sequence": 4,
+      "timestamp": "2026-07-31T08:03:42.939Z"
+    },
+    {
+      "type": "tool_lifecycle",
+      "callId": "lookup-1",
+      "tool": "lookup_owner",
+      "state": "completed",
+      "mode": "observe",
+      "sequence": 5,
+      "timestamp": "2026-07-31T08:03:42.939Z"
+    },
+    {
+      "type": "tool_call",
+      "callId": "lookup-2",
+      "tool": "lookup_owner",
+      "arguments": {
+        "team": "iOS"
+      },
+      "sequence": 6,
+      "timestamp": "2026-07-31T08:03:42.940Z"
+    },
+    {
+      "type": "tool_lifecycle",
+      "callId": "lookup-2",
+      "tool": "lookup_owner",
+      "state": "requested",
+      "mode": "observe",
+      "sequence": 7,
+      "timestamp": "2026-07-31T08:03:42.940Z"
+    },
+    {
+      "type": "tool_lifecycle",
+      "callId": "lookup-2",
+      "tool": "lookup_owner",
+      "state": "dispatched",
+      "mode": "observe",
+      "sequence": 8,
+      "timestamp": "2026-07-31T08:03:42.940Z"
+    },
+    {
+      "type": "tool_result",
+      "callId": "lookup-2",
+      "tool": "lookup_owner",
+      "result": {
+        "team": "iOS",
+        "owner": "priya@example.test"
+      },
+      "source": "fixture",
+      "sequence": 9,
+      "timestamp": "2026-07-31T08:03:42.940Z"
+    },
+    {
+      "type": "tool_lifecycle",
+      "callId": "lookup-2",
+      "tool": "lookup_owner",
+      "state": "completed",
+      "mode": "observe",
+      "sequence": 10,
+      "timestamp": "2026-07-31T08:03:42.940Z"
+    },
+    {
+      "type": "tool_call",
+      "callId": "assign-1",
+      "tool": "assign_work_item",
+      "arguments": {
+        "workItemId": "BUG-101",
+        "team": "Android",
+        "assignedTo": "alex@example.test"
+      },
+      "sequence": 11,
+      "timestamp": "2026-07-31T08:03:42.940Z"
+    },
+    {
+      "type": "tool_lifecycle",
+      "callId": "assign-1",
+      "tool": "assign_work_item",
+      "state": "requested",
+      "mode": "observe",
+      "sequence": 12,
+      "timestamp": "2026-07-31T08:03:42.940Z"
+    },
+    {
+      "type": "tool_lifecycle",
+      "callId": "assign-1",
+      "tool": "assign_work_item",
+      "state": "dispatched",
+      "mode": "observe",
+      "sequence": 13,
+      "timestamp": "2026-07-31T08:03:42.940Z"
+    },
+    {
+      "type": "tool_result",
+      "callId": "assign-1",
+      "tool": "assign_work_item",
+      "result": {
+        "assigned": true
+      },
+      "source": "fixture",
+      "sequence": 14,
+      "timestamp": "2026-07-31T08:03:42.940Z"
+    },
+    {
+      "type": "tool_lifecycle",
+      "callId": "assign-1",
+      "tool": "assign_work_item",
+      "state": "completed",
+      "mode": "observe",
+      "sequence": 15,
+      "timestamp": "2026-07-31T08:03:42.940Z"
+    },
+    {
+      "type": "tool_call",
+      "callId": "assign-2",
+      "tool": "assign_work_item",
+      "arguments": {
+        "workItemId": "BUG-202",
+        "team": "iOS",
+        "assignedTo": "alex@example.test"
+      },
+      "sequence": 16,
+      "timestamp": "2026-07-31T08:03:42.940Z"
+    },
+    {
+      "type": "tool_lifecycle",
+      "callId": "assign-2",
+      "tool": "assign_work_item",
+      "state": "requested",
+      "mode": "observe",
+      "sequence": 17,
+      "timestamp": "2026-07-31T08:03:42.940Z"
+    },
+    {
+      "type": "tool_lifecycle",
+      "callId": "assign-2",
+      "tool": "assign_work_item",
+      "state": "dispatched",
+      "mode": "observe",
+      "sequence": 18,
+      "timestamp": "2026-07-31T08:03:42.940Z"
+    },
+    {
+      "type": "tool_result",
+      "callId": "assign-2",
+      "tool": "assign_work_item",
+      "result": {
+        "assigned": true
+      },
+      "source": "fixture",
+      "sequence": 19,
+      "timestamp": "2026-07-31T08:03:42.940Z"
+    },
+    {
+      "type": "tool_lifecycle",
+      "callId": "assign-2",
+      "tool": "assign_work_item",
+      "state": "completed",
+      "mode": "observe",
+      "sequence": 20,
+      "timestamp": "2026-07-31T08:03:42.940Z"
+    },
+    {
+      "type": "final",
+      "status": "completed",
+      "output": {
+        "assignments": [
+          {
+            "workItemId": "BUG-101",
+            "assignedTo": "alex@example.test"
+          },
+          {
+            "workItemId": "BUG-202",
+            "assignedTo": "alex@example.test"
+          }
+        ]
+      },
+      "sequence": 21,
+      "timestamp": "2026-07-31T08:03:42.940Z"
+    }
+  ],
+  "decision": {
+    "status": "failed",
+    "exitCode": 1,
+    "findings": [
+      {
+        "id": "tool.arguments_subset",
+        "severity": "error",
+        "message": "Arguments for assign_work_item did not contain the expected values",
+        "evidenceSequence": 16
+      }
+    ]
+  }
+}

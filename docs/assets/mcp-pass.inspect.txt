@@ -1,13 +1,25 @@
-PASS mcp-release-assistant (512ms)
+PASS mcp-release-assistant (546ms)
 Evidence: ./docs/assets/mcp-pass.report.json
-  #1 MCP agentdoctor-release-demo@1.0.0 TOOLS project.get_release_status, bugs.list_blockers, calendar.check_availability, calendar.create_event (373ms)
+  #1 MCP agentdoctor-release-demo@1.0.0 TOOLS project.get_release_status, bugs.list_blockers, calendar.check_availability, calendar.create_event (401ms)
   #2 CALL project.get_release_status {"project":"Apollo"}
-  #3 RESULT project.get_release_status (27ms, 432 result bytes)
-  #4 CALL bugs.list_blockers {"project":"Apollo","state":"open"}
-  #5 RESULT bugs.list_blockers (3ms, 260 result bytes)
-  #6 CALL calendar.check_availability {"durationMinutes":30}
-  #7 RESULT calendar.check_availability (5ms, 180 result bytes)
-  #8 CONFIRMATION true
-  #9 CALL calendar.create_event {"title":"Apollo release review","startsAt":"2026-07-31T15:00:00Z","durationMinutes":30}
-  #10 RESULT calendar.create_event (2ms, 158 result bytes)
-  #11 FINAL completed
+  #3 REQUESTED project.get_release_status
+  #4 DISPATCHED project.get_release_status
+  #5 RESULT project.get_release_status (30ms, 432 result bytes)
+  #6 COMPLETED project.get_release_status
+  #7 CALL bugs.list_blockers {"project":"Apollo","state":"open"}
+  #8 REQUESTED bugs.list_blockers
+  #9 DISPATCHED bugs.list_blockers
+  #10 RESULT bugs.list_blockers (3ms, 260 result bytes)
+  #11 COMPLETED bugs.list_blockers
+  #12 CALL calendar.check_availability {"durationMinutes":30}
+  #13 REQUESTED calendar.check_availability
+  #14 DISPATCHED calendar.check_availability
+  #15 RESULT calendar.check_availability (3ms, 180 result bytes)
+  #16 COMPLETED calendar.check_availability
+  #17 CONFIRMATION true
+  #18 CALL calendar.create_event {"title":"Apollo release review","startsAt":"2026-07-31T15:00:00Z","durationMinutes":30}
+  #19 REQUESTED calendar.create_event
+  #20 DISPATCHED calendar.create_event
+  #21 RESULT calendar.create_event (3ms, 158 result bytes)
+  #22 COMPLETED calendar.create_event
+  #23 FINAL completed

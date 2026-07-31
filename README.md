@@ -81,6 +81,27 @@ call and returns critical exit code `3`.
 [Animation summary](docs/assets/safety-failure.summary.txt) ·
 [Static final frame](docs/assets/safety-failure.png)
 
+### A scoped expectation catches what an unscoped contract misses
+
+An agent looks up an owner per bug, then assigns each bug. On the second bug it
+reuses the first lookup's owner. Both contracts require the same tools, the same
+order, and the same argument fields, so an unscoped contract passes the buggy
+agent with exit `0`. Scoping the expectation to a specific call — `callIndex`
+plus a `$fromResult` reference that resolves against *that* call's lookup —
+fails the same run at evidence `#16`, and passes once the agent is fixed.
+
+![An unscoped contract passes a buggy agent while a call-scoped contract fails it](docs/assets/scoped-catch.gif)
+
+```bash
+npm run record:scope
+```
+
+[Animation summary](docs/assets/scoped-catch.summary.txt) ·
+[Unscoped pass report](docs/assets/scoped-catch-unscoped.report.json) ·
+[Scoped failure report](docs/assets/scoped-catch-scoped-failure.report.json) ·
+[Fixed pass report](docs/assets/scoped-catch-fixed.report.json) ·
+[Static final frame](docs/assets/scoped-catch.png)
+
 ## Where Agent Doctor detects and where it prevents
 
 Agent Doctor has two operating modes over the same JSONL adapter contract.

@@ -1,64 +1,64 @@
 {
   "reportVersion": "0.1",
-  "runId": "38876757-f74e-4e4d-99cd-47c8378048e8",
+  "runId": "ba2ab4dc-9d38-4238-b53a-d3a21cff72e4",
   "scenarioId": "mcp-release-assistant",
   "scenarioPath": "./examples/mcp-release-contract.yml",
   "command": [
     "node",
     "examples/agentic-release-assistant.mjs"
   ],
-  "startedAt": "2026-07-30T16:07:43.581Z",
-  "durationMs": 512,
+  "startedAt": "2026-07-31T08:03:26.160Z",
+  "durationMs": 546,
   "graph": [
     {
       "node": "load",
       "status": "started",
-      "timestamp": "2026-07-30T16:07:43.556Z"
+      "timestamp": "2026-07-31T08:03:26.138Z"
     },
     {
       "node": "load",
       "status": "completed",
-      "timestamp": "2026-07-30T16:07:43.580Z"
+      "timestamp": "2026-07-31T08:03:26.158Z"
     },
     {
       "node": "execute",
       "status": "started",
-      "timestamp": "2026-07-30T16:07:43.580Z"
+      "timestamp": "2026-07-31T08:03:26.158Z"
     },
     {
       "node": "execute",
       "status": "completed",
-      "timestamp": "2026-07-30T16:07:44.113Z"
+      "timestamp": "2026-07-31T08:03:26.725Z"
     },
     {
       "node": "capture",
       "status": "started",
-      "timestamp": "2026-07-30T16:07:44.113Z"
+      "timestamp": "2026-07-31T08:03:26.725Z"
     },
     {
       "node": "capture",
       "status": "completed",
-      "timestamp": "2026-07-30T16:07:44.113Z"
+      "timestamp": "2026-07-31T08:03:26.725Z"
     },
     {
       "node": "evaluate",
       "status": "started",
-      "timestamp": "2026-07-30T16:07:44.113Z"
+      "timestamp": "2026-07-31T08:03:26.725Z"
     },
     {
       "node": "evaluate",
       "status": "completed",
-      "timestamp": "2026-07-30T16:07:44.114Z"
+      "timestamp": "2026-07-31T08:03:26.728Z"
     },
     {
       "node": "report",
       "status": "started",
-      "timestamp": "2026-07-30T16:07:44.114Z"
+      "timestamp": "2026-07-31T08:03:26.728Z"
     },
     {
       "node": "report",
       "status": "completed",
-      "timestamp": "2026-07-30T16:07:44.115Z"
+      "timestamp": "2026-07-31T08:03:26.728Z"
     }
   ],
   "evidence": [
@@ -307,9 +307,9 @@
       "capabilitySnapshotMatches": true,
       "toolSnapshotMatches": true,
       "driftedTools": [],
-      "durationMs": 373,
+      "durationMs": 401,
       "sequence": 1,
-      "timestamp": "2026-07-30T16:07:43.954Z"
+      "timestamp": "2026-07-31T08:03:26.561Z"
     },
     {
       "type": "tool_call",
@@ -319,7 +319,25 @@
         "project": "Apollo"
       },
       "sequence": 2,
-      "timestamp": "2026-07-30T16:07:44.039Z"
+      "timestamp": "2026-07-31T08:03:26.652Z"
+    },
+    {
+      "type": "tool_lifecycle",
+      "callId": "call-1",
+      "tool": "project.get_release_status",
+      "state": "requested",
+      "mode": "observe",
+      "sequence": 3,
+      "timestamp": "2026-07-31T08:03:26.652Z"
+    },
+    {
+      "type": "tool_lifecycle",
+      "callId": "call-1",
+      "tool": "project.get_release_status",
+      "state": "dispatched",
+      "mode": "observe",
+      "sequence": 4,
+      "timestamp": "2026-07-31T08:03:26.652Z"
     },
     {
       "type": "tool_result",
@@ -335,10 +353,19 @@
         }
       },
       "source": "mcp",
-      "durationMs": 27,
+      "durationMs": 30,
       "resultBytes": 432,
-      "sequence": 3,
-      "timestamp": "2026-07-30T16:07:44.066Z"
+      "sequence": 5,
+      "timestamp": "2026-07-31T08:03:26.682Z"
+    },
+    {
+      "type": "tool_lifecycle",
+      "callId": "call-1",
+      "tool": "project.get_release_status",
+      "state": "completed",
+      "mode": "observe",
+      "sequence": 6,
+      "timestamp": "2026-07-31T08:03:26.682Z"
     },
     {
       "type": "tool_call",
@@ -348,8 +375,26 @@
         "project": "Apollo",
         "state": "open"
       },
-      "sequence": 4,
-      "timestamp": "2026-07-30T16:07:44.066Z"
+      "sequence": 7,
+      "timestamp": "2026-07-31T08:03:26.683Z"
+    },
+    {
+      "type": "tool_lifecycle",
+      "callId": "call-2",
+      "tool": "bugs.list_blockers",
+      "state": "requested",
+      "mode": "observe",
+      "sequence": 8,
+      "timestamp": "2026-07-31T08:03:26.683Z"
+    },
+    {
+      "type": "tool_lifecycle",
+      "callId": "call-2",
+      "tool": "bugs.list_blockers",
+      "state": "dispatched",
+      "mode": "observe",
+      "sequence": 9,
+      "timestamp": "2026-07-31T08:03:26.683Z"
     },
     {
       "type": "tool_result",
@@ -367,8 +412,17 @@
       "source": "mcp",
       "durationMs": 3,
       "resultBytes": 260,
-      "sequence": 5,
-      "timestamp": "2026-07-30T16:07:44.069Z"
+      "sequence": 10,
+      "timestamp": "2026-07-31T08:03:26.686Z"
+    },
+    {
+      "type": "tool_lifecycle",
+      "callId": "call-2",
+      "tool": "bugs.list_blockers",
+      "state": "completed",
+      "mode": "observe",
+      "sequence": 11,
+      "timestamp": "2026-07-31T08:03:26.686Z"
     },
     {
       "type": "tool_call",
@@ -377,8 +431,26 @@
       "arguments": {
         "durationMinutes": 30
       },
-      "sequence": 6,
-      "timestamp": "2026-07-30T16:07:44.069Z"
+      "sequence": 12,
+      "timestamp": "2026-07-31T08:03:26.687Z"
+    },
+    {
+      "type": "tool_lifecycle",
+      "callId": "call-3",
+      "tool": "calendar.check_availability",
+      "state": "requested",
+      "mode": "observe",
+      "sequence": 13,
+      "timestamp": "2026-07-31T08:03:26.687Z"
+    },
+    {
+      "type": "tool_lifecycle",
+      "callId": "call-3",
+      "tool": "calendar.check_availability",
+      "state": "dispatched",
+      "mode": "observe",
+      "sequence": 14,
+      "timestamp": "2026-07-31T08:03:26.687Z"
     },
     {
       "type": "tool_result",
@@ -391,18 +463,27 @@
         ]
       },
       "source": "mcp",
-      "durationMs": 5,
+      "durationMs": 3,
       "resultBytes": 180,
-      "sequence": 7,
-      "timestamp": "2026-07-30T16:07:44.074Z"
+      "sequence": 15,
+      "timestamp": "2026-07-31T08:03:26.690Z"
+    },
+    {
+      "type": "tool_lifecycle",
+      "callId": "call-3",
+      "tool": "calendar.check_availability",
+      "state": "completed",
+      "mode": "observe",
+      "sequence": 16,
+      "timestamp": "2026-07-31T08:03:26.690Z"
     },
     {
       "type": "confirmation",
       "confirmed": true,
       "tool": "calendar.create_event",
       "source": "input.data.confirmed",
-      "sequence": 8,
-      "timestamp": "2026-07-30T16:07:44.075Z"
+      "sequence": 17,
+      "timestamp": "2026-07-31T08:03:26.690Z"
     },
     {
       "type": "tool_call",
@@ -413,8 +494,26 @@
         "startsAt": "2026-07-31T15:00:00Z",
         "durationMinutes": 30
       },
-      "sequence": 9,
-      "timestamp": "2026-07-30T16:07:44.075Z"
+      "sequence": 18,
+      "timestamp": "2026-07-31T08:03:26.690Z"
+    },
+    {
+      "type": "tool_lifecycle",
+      "callId": "call-4",
+      "tool": "calendar.create_event",
+      "state": "requested",
+      "mode": "observe",
+      "sequence": 19,
+      "timestamp": "2026-07-31T08:03:26.690Z"
+    },
+    {
+      "type": "tool_lifecycle",
+      "callId": "call-4",
+      "tool": "calendar.create_event",
+      "state": "dispatched",
+      "mode": "observe",
+      "sequence": 20,
+      "timestamp": "2026-07-31T08:03:26.690Z"
     },
     {
       "type": "tool_result",
@@ -425,10 +524,19 @@
         "status": "created"
       },
       "source": "mcp",
-      "durationMs": 2,
+      "durationMs": 3,
       "resultBytes": 158,
-      "sequence": 10,
-      "timestamp": "2026-07-30T16:07:44.077Z"
+      "sequence": 21,
+      "timestamp": "2026-07-31T08:03:26.693Z"
+    },
+    {
+      "type": "tool_lifecycle",
+      "callId": "call-4",
+      "tool": "calendar.create_event",
+      "state": "completed",
+      "mode": "observe",
+      "sequence": 22,
+      "timestamp": "2026-07-31T08:03:26.693Z"
     },
     {
       "type": "final",
@@ -451,8 +559,8 @@
           "eventId": "evt-mcp-demo"
         }
       },
-      "sequence": 11,
-      "timestamp": "2026-07-30T16:07:44.078Z"
+      "sequence": 23,
+      "timestamp": "2026-07-31T08:03:26.694Z"
     }
   ],
   "decision": {

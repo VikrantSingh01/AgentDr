@@ -64,6 +64,15 @@ async function publishReport(report, filename) {
   return path;
 }
 
+function assertReportExitCode(commandLabel, report, expectedExitCode) {
+  const actualExitCode = report.decision?.exitCode;
+  if (actualExitCode !== expectedExitCode) {
+    throw new Error(
+      `${commandLabel} report exit code ${actualExitCode}; expected ${expectedExitCode}`
+    );
+  }
+}
+
 async function publishInspectOutput(reportFile, filename) {
   const inspected = await capture(
     `agentdoctor inspect ${portablePath(reportFile)}`,
@@ -74,20 +83,41 @@ async function publishInspectOutput(reportFile, filename) {
 }
 
 function evidenceLines(report) {
-  return report.evidence
-    .sort((left, right) => left.sequence - right.sequence)
-    .map((event) => {
-      if (event.type === "mcp_discovery") {
-        return `#${event.sequence} mcp_discovery tools=${event.tools.length}`;
-      }
-      if (event.type === "tool_result") {
-        return `#${event.sequence} tool_result ${event.tool} source=${event.source}`;
-      }
-      if (event.type === "final") {
-        return `#${event.sequence} final status=${event.status}`;
-      }
-      return `#${event.sequence} ${event.type} ${event.tool}`;
-    });
+  const events = [...report.evidence].sort((left, right) => left.sequence - right.sequence);
+  const lifecycleCounts = new Map();
+  for (const event of events) {
+    if (event.type === "tool_lifecycle") {
+      lifecycleCounts.set(event.callId, (lifecycleCounts.get(event.callId) ?? 0) + 1);
+    }
+  }
+  return events.flatMap((event) => {
+    if (event.type === "mcp_discovery") {
+      return `#${event.sequence} mcp_discovery tools=${event.tools.length}`;
+    }
+    if (event.type === "tool_call") {
+      const result = events.find(
+        (candidate) => candidate.type === "tool_result" && candidate.callId === event.callId
+      );
+      const sequence = result
+        ? `#${event.sequence}-#${result.sequence}`
+        : `#${event.sequence}`;
+      const source = result ? ` result=${result.source}` : "";
+      const lifecycle = lifecycleCounts.has(event.callId)
+        ? ` lifecycle=${lifecycleCounts.get(event.callId)}`
+        : "";
+      return `${sequence} tool_call ${event.tool}${source}${lifecycle}`;
+    }
+    if (event.type === "tool_result" || event.type === "tool_lifecycle") {
+      return [];
+    }
+    if (event.type === "confirmation") {
+      return `#${event.sequence} confirmation ${event.tool}`;
+    }
+    if (event.type === "final") {
+      return `#${event.sequence} final status=${event.status}`;
+    }
+    return `#${event.sequence} ${event.type} ${event.tool}`;
+  });
 }
 
 await mkdir(outputDirectory, { recursive: true });
@@ -99,6 +129,7 @@ const passRun = await capture(
 );
 const passReportFile = reportPath(passRun.output);
 const passReport = JSON.parse(await readFile(passReportFile, "utf8"));
+assertReportExitCode("agentdoctor test examples/mcp-release-contract.yml", passReport, 0);
 const publishedPassReportFile = await publishReport(passReport, "mcp-pass.report.json");
 await publishInspectOutput(
   publishedPassReportFile,
@@ -132,6 +163,11 @@ const safetyRun = await capture(
 );
 const safetyReportFile = reportPath(safetyRun.output);
 const safetyReport = JSON.parse(await readFile(safetyReportFile, "utf8"));
+assertReportExitCode(
+  "agentdoctor test examples/agentic-release-contract.yml -- node examples/agentic-release-assistant.mjs --regression=unconfirmed-mutation",
+  safetyReport,
+  3
+);
 const protectedCall = safetyReport.evidence.find(
   (event) => event.type === "tool_call" && event.tool === "calendar.create_event"
 );

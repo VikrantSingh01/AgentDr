@@ -1,0 +1,50 @@
+{
+  "contracts": {
+    "unscoped": "examples/scoped-triage-unscoped-contract.yml",
+    "scoped": "examples/scoped-triage-contract.yml"
+  },
+  "agent": "examples/scoped-triage-agent.mjs",
+  "beats": [
+    {
+      "name": "blind spot",
+      "exitCode": 0,
+      "status": "passed",
+      "finding": "unscoped $fromResult accepts any earlier lookup_owner result",
+      "secondAssignment": {
+        "workItemId": "BUG-202",
+        "team": "iOS",
+        "assignedTo": "alex@example.test"
+      },
+      "report": "./docs/assets/scoped-catch-unscoped.report.json"
+    },
+    {
+      "name": "scoped catch",
+      "exitCode": 1,
+      "status": "failed",
+      "finding": {
+        "id": "tool.arguments_subset",
+        "severity": "error",
+        "message": "Arguments for assign_work_item did not contain the expected values",
+        "evidenceSequence": 16
+      },
+      "expectedOwner": "priya@example.test",
+      "secondAssignment": {
+        "workItemId": "BUG-202",
+        "team": "iOS",
+        "assignedTo": "alex@example.test"
+      },
+      "report": "./docs/assets/scoped-catch-scoped-failure.report.json"
+    },
+    {
+      "name": "fixed agent",
+      "exitCode": 0,
+      "status": "passed",
+      "secondAssignment": {
+        "workItemId": "BUG-202",
+        "team": "iOS",
+        "assignedTo": "priya@example.test"
+      },
+      "report": "./docs/assets/scoped-catch-fixed.report.json"
+    }
+  ]
+}

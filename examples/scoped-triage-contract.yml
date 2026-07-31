@@ -1,0 +1,58 @@
+schemaVersion: "0.1"
+id: scoped-triage
+input:
+  message: Assign each work item to the owner for its team.
+  data:
+    workItems:
+      - id: BUG-101
+        team: Android
+      - id: BUG-202
+        team: iOS
+fixtures:
+  lookup_owner:
+    $cases:
+      - callIndex: 0
+        arguments:
+          team: Android
+        result:
+          team: Android
+          owner: "alex@example.test"
+      - callIndex: 1
+        arguments:
+          team: iOS
+        result:
+          team: iOS
+          owner: "priya@example.test"
+  assign_work_item:
+    assigned: true
+expect:
+  tools:
+    required:
+      - lookup_owner
+      - assign_work_item
+    order:
+      - lookup_owner
+      - lookup_owner
+      - assign_work_item
+      - assign_work_item
+    maxCalls: 4
+    budgets:
+      - tool: lookup_owner
+        minCalls: 2
+        maxCalls: 2
+      - tool: assign_work_item
+        minCalls: 2
+        maxCalls: 2
+    arguments:
+      - tool: assign_work_item
+        callIndex: 1
+        match:
+          assignedTo:
+            $fromResult:
+              tool: lookup_owner
+              callIndex: 1
+              path: owner
+  outcome:
+    status: completed
+performance:
+  maxDurationMs: 3000
