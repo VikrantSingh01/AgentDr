@@ -469,9 +469,10 @@ npm run expense:measure          # both numbers for the second domain
 - configured key-based redaction is not general DLP;
 - semantic linting covers core contradictions, enforcement reachability, and
   fixture reachability, not complete policy coverage;
-- argument expectations apply to every call of a tool, so per-call selectors are
-  not available; derived arguments can be bound to earlier tool results with
-  `$fromResult`, but conditional and per-tool budget policies cannot be expressed;
+- argument expectations can be scoped to one call with `callIndex` and bound to
+  earlier tool results with `$fromResult`, including joins on a producing call's
+  arguments or results, but they cannot express an aggregate over a reported
+  collection such as a reported total matching the sum of its parts;
 - no tamper-evident provenance, HTTP, Microsoft Agents 365, or External Agents
   adapter yet.
 
