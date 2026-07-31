@@ -85,6 +85,69 @@ reward an over-strict contract. The harness proves equivalence by hashing the
 outcome and call multiset against a live baseline run rather than trusting a
 label.
 
+### The second domain, and what it was for
+
+Everything above rests on one contract, one agent, one task. The overfitting risk
+had therefore moved up a level: not contract-overfitted-to-world, which the
+false-positive corpus prices, but language-overfitted-to-`em-triage-steward`,
+which nothing priced. A contract language shaped by exactly one workload will
+express that workload well and say nothing about whether it can express another.
+
+`examples/expense-steward` is a second reference domain with a deliberately
+different topology. Instead of one queue triaged and one rollout advanced, it
+fans out over a batch of records, branches per record between two mutually
+exclusive actions, and reports an aggregate. It was authored `PROCESS.md` first,
+then the workflow, then the contract, so the contract describes the process
+rather than the code that happens to implement it.
+
+| Metric | `em-triage-steward` | `examples/expense-steward` |
+|---|---:|---:|
+| Mutation score | **98.1%** (52 killed, 1 survivor / 53 scorable) | **98.3%** (59 killed, 1 survivor, 0 invalid) |
+| Behaviour-preserving excluded | 4 of 57 generated | 9 |
+| Over-blocked behaviour-preserving mutants | **0** | **0** |
+| False positives | **0 of 11 worlds (0.0%)** | **0 of 11 worlds (0.0%)** |
+| Survivor | `swap-arg:7:summary`, free-text prose | `misreport-outcome:totalApproved`, a numeric sum |
+
+Five constructs had to be added before the second contract could be written at
+all, and every one of them was forced by a specific measurement rather than
+proposed in the abstract. Comparison operators in the criteria value position let
+a numeric bound resolve from the policy the world publishes, instead of freezing
+the fixture's limit as a literal. `whereResult` selects a producing call by what
+it returned rather than by what it was asked, which is the only way to join on a
+lookup that takes an identifier and answers with a verdict. `$anyOf` in the value
+position resolves to the union of candidate sets, so a reported value can be tied
+to whichever of two exclusive actions actually happened; it closed four mutants
+in which an approved expense's submitter was told the claim had been escalated.
+`correlate` on a precedence rule makes the ordering requirement per record and
+vacuous where the prerequisite was never gathered, which closed a mutant that
+escalated an expense before fetching the receipt it then reported checking.
+`$anyOf` inside a conditional obligation expresses a duty owed under either of
+two outcomes, which removed the only two false positives the second corpus found.
+
+The instrument itself was wrong, and the second domain is what exposed it. The
+behaviour fingerprint treated call order as never significant, so a mutant that
+approved an expense and then fetched the receipt was excluded as
+behaviour-preserving. It produced the same calls and the same report, but not the
+same act: the approval could not have been informed by evidence that had not
+arrived. The fingerprint now carries, for each state-changing call, the reads
+that preceded it, and compares them directionally. A call may gain context and
+remain the same act; a call that has lost a read it stood on is a different act.
+Requiring the read sets to be equal instead flagged every harmless interleaving
+of independent records and cost five spurious survivors.
+
+Two facts make that correction trustworthy rather than convenient. Applying it to
+`em-triage-steward` left the score at exactly 98.1% with the same single
+survivor, and moving both domains onto one shared set of mutation operators left
+it at exactly 98.1% again, with the same survivor and the same four excluded
+mutants. A change to a measuring device that leaves the existing measurement
+untouched while resolving a known error in a new case is a sharpening; one that
+moves the number is a result that needs explaining.
+
+The claim this supports is narrow and worth stating narrowly. The contract
+language generalises past the shape of the first task. It is not independent
+validation, because the second agent was written by the same author inside this
+repository, and it does not replace the need for a genuinely third-party agent.
+
 `--repeat N` now measures report-shape stability across identical runs. A
 contract judges one run at a time, so a report whose shape depends on the run is
 invisible to it. Three GitHub Copilot runs against the same prompt and fixtures

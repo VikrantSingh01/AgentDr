@@ -103,7 +103,7 @@ expect:
       # Per record, not per tool. A receipt the agent chose to fetch for one
       # expense has to arrive before that expense is acted on; a receipt fetched
       # afterwards did not inform the decision, whatever the report claims. The
-      # uncorrelated form cannot say this — it would demand a receipt for every
+      # uncorrelated form cannot say this: it would demand a receipt for every
       # expense, including the ones below the threshold that need none.
       #
       # Vacuous where no receipt was fetched. Whether one was required at all is

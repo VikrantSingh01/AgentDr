@@ -32,11 +32,12 @@ published schema is generated at
 Current deterministic assertions include:
 
 - required and forbidden tools;
-- ordered tool subsequences, run-wide maximum calls, and per-tool call floors
-  and ceilings;
+- ordered tool subsequences, run-wide and per-record precedence rules, run-wide
+  maximum calls, and per-tool call floors and ceilings;
 - argument subset and JSON Schema validation, optionally scoped to one call;
 - derived argument equality against values observed in earlier tool results,
-  optionally scoped to one call of the referenced tool;
+  optionally scoped to one call of the referenced tool, joined by producing
+  arguments or results, and checked with numeric or disjunctive criteria;
 - one-use, tool-scoped or exact-argument-bound confirmation before protected calls;
 - optional pre-dispatch enforcement for forbidden and confirmation-protected calls;
 - semantic checks for core policy contradictions, enforcement reachability,
@@ -71,9 +72,32 @@ expect:
           equals: true
 ```
 
+A condition may also be a disjunction. In the expense steward, notifying the
+submitter is owed when the final report contains either approved expenses or
+escalated expenses:
+
+```yaml
+expect:
+  tools:
+    required:
+      - tool: notify.submitter
+        when:
+          $anyOf:
+            - outcomePath: approved
+              nonEmpty: true
+            - outcomePath: escalated
+              nonEmpty: true
+```
+
+The `$anyOf` object is the condition. It holds when any branch holds, and each
+branch is evaluated with the same condition vocabulary, so branches may use
+`equals`, `nonEmpty`, or nested `$anyOf`. If any branch reads a path that is not
+present in the final report, the condition is unresolved and reports
+`tool.condition_unresolved`; the missing branch is not quietly treated as false.
+
 The relationship is a biconditional. When the condition holds and the tool was
 not called, the finding is `tool.required_when`. When the condition does not hold
-and the tool *was* called, the finding is `tool.forbidden_when` — an agent that
+and the tool *was* called, the finding is `tool.forbidden_when`. An agent that
 takes a consequential action and then reports that it did not is diverging from
 its own account, which is a defect in its own right and not merely a relaxed
 obligation.
@@ -87,16 +111,19 @@ escalation, whereas `escalated` does not.
 If the referenced path is absent from the final output, the finding is
 `tool.condition_unresolved`. A condition the harness could not evaluate is never
 a pass. Scenario linting rejects a tool listed both unconditionally and
-conditionally, a condition declaring neither `equals` nor `nonEmpty`, a condition
-declaring both, and `nonEmpty: false`, which states no condition at all.
+conditionally, a leaf condition declaring neither `equals` nor `nonEmpty`, a leaf
+condition declaring both, and `nonEmpty: false`, which states no condition at
+all. For conditional `$anyOf`, linting rejects fewer than two alternatives and a
+condition object that combines `$anyOf` with `outcomePath`. Schema validation
+also rejects unknown condition properties.
 
-## Ordering scope
+## Ordering scope and correlated precedence
 
 A precedence rule says one call depends on another. By default it reads as a
 statement about every pair: every `before` call must precede every `after` call.
 That reading also forbids calling `before` again *after* the action, which is how
 a careful agent verifies what it just did. `scope: first` narrows the rule to the
-obligation that was actually intended — the first action must be informed:
+obligation that was actually intended: the first action must be informed:
 
 ```yaml
 expect:
@@ -116,12 +143,47 @@ In both scopes, an `after` call with no `before` call anywhere in the run report
 exactly the behaviour the rule exists to prevent: the dependent action ran and
 its prerequisite never happened at all.
 
+Some dependencies are per record rather than per tool. The expense steward may
+fetch a receipt for one claim and approve another claim that never needed a
+receipt. A global `fetch_receipt before approve_expense` rule would either demand
+receipts for records below the threshold or let a receipt for one expense justify
+an action on another. `correlate` makes the ordering key explicit:
+
+```yaml
+expect:
+  tools:
+    precedence:
+      - before: finance.fetch_receipt
+        after: finance.approve_expense
+        correlate: [expenseId]
+      - before: finance.fetch_receipt
+        after: finance.escalate_expense
+        correlate: [expenseId]
+```
+
+For each path in `correlate`, the evaluator reads that argument path from both
+the `before` and `after` calls and builds a tuple key. An `after` call reports
+`tool.precedence` only when a `before` call for the same key exists but appears
+later. If no prerequisite call was ever gathered for that key, the rule is
+vacuous for that record. Whether the prerequisite was required at all belongs in
+argument correlations or other policy checks; correlated precedence only orders
+evidence the agent chose to gather. A call missing one of the correlated argument
+paths is outside that per-record check.
+
+`correlate` cannot be combined with `scope`, because a per-record rule already
+has one first prerequisite per key. Scenario linting rejects that combination,
+duplicate paths inside one `correlate` list, duplicate precedence rules with the
+same `before`, `after`, and `correlate` tuple, self-ordering rules, opposing
+rules for the same tuple, rules contradicted by `expect.tools.order`, and a
+`before` tool that is forbidden. Schema validation requires at least one
+non-empty correlate path.
+
 ## Publishing the output contract
 
 An agent cannot satisfy an output shape it was never shown. In the Copilot
 replay, the agent's report was complete and correct in substance and used its own
-key names — `escalated.bugIds` where the contract wanted `escalatedBugIds`,
-`ringAdvance.to` where it wanted `toRing` — and was failed for vocabulary the
+key names, `escalated.bugIds` where the contract wanted `escalatedBugIds` and
+`ringAdvance.to` where it wanted `toRing`, then was failed for vocabulary the
 prompt never disclosed.
 
 `agentdoctor interface <contract>` emits that vocabulary as prompt-ready text:
@@ -149,7 +211,7 @@ declared is an obligation the contract holds the agent to in private.
 
 A contract's `expect.outcome.schema` is its definition of a well-formed report.
 When the report does not satisfy it, every expectation that reads a path out of
-that report fails for the same reason — conditional obligations cannot resolve
+that report fails for the same reason: conditional obligations cannot resolve
 their condition, `callsMatchOutcome` cannot find its array, `$fromOutcome`
 references cannot resolve, and `outcome.match` cannot match.
 
@@ -265,7 +327,7 @@ and reports `fixture.unmatched_call`. It is never a success-shaped fallback: the
 run still fails. Aborting instead would be worse than useless, because a real
 agent occasionally calls a tool with arguments no fixture anticipated, and
 stopping there switches the instrument off at exactly that point and hides every
-defect later in the trace. That is not hypothetical — replaying a recorded
+defect later in the trace. That is not hypothetical: replaying a recorded
 Copilot run against an unmodified contract originally produced a single runtime
 failure; once the miss became non-fatal the same trace surfaced a critical
 unconfirmed production ring advance and a skipped rollout ring that had been
@@ -474,8 +536,8 @@ expressible. See [Scoped expectations](#scoped-expectations).
 `callIndex` buys precision at a price: it encodes an ordering the domain may not
 require. Pinning the second update to the second lookup rejects a run that
 performs the same two updates in the opposite order, even though nothing in the
-domain fixes that order. `where` and `find` select the producing call by
-**shared key** instead of by position:
+domain fixes that order. `where`, `whereResult`, and `find` select the producing
+call by evidence instead of by position:
 
 ```yaml
 expect:
@@ -503,16 +565,72 @@ area-owner lookup for the area of the bug this update is about.*
 
 - `where` constrains the **arguments** of the producing call. Only results whose
   originating call matches every key are considered.
+- `whereResult` constrains the **result** of the producing call. Use it when the
+  selector is known only after the call returns, such as a receipt lookup that
+  returns whether it was verified.
 - `find` selects one element from an array result, and `select` reads a path from
   that element. `select` requires `find`.
 - `$argument` reads a value from the **call under test**, which is what closes
   the loop between consumer and producer.
-- Criteria values may be literals, `$argument` nodes, or nested `$fromResult`
-  references, so a correlation can join across more than one hop.
+- Criteria values may be literals, `$argument` nodes, nested `$fromResult`
+  references, comparison objects, or value-position `$anyOf`, so a correlation
+  can join across more than one hop.
 
-`callIndex` and `where` cannot be combined: a correlation selects a call by key,
-and mixing the two would silently reintroduce the positional constraint the
-correlation exists to remove. The linter rejects it.
+The expense steward uses result-side selection and numeric criteria together. An
+approval may target only an expense below the policy's auto-approve limit, and an
+expense above the receipt threshold must have a receipt lookup whose result came
+back verified:
+
+```yaml
+- tool: finance.approve_expense
+  match:
+    expenseId:
+      $fromResult:
+        tool: finance.list_pending
+        path: expenses
+        find:
+          id:
+            $argument: expenseId
+          amount:
+            $lessThan:
+              $fromResult:
+                tool: finance.get_policy
+                path: autoApproveUnder
+          $anyOf:
+            - amount:
+                $lessThan:
+                  $fromResult:
+                    tool: finance.get_policy
+                    path: receiptRequiredOver
+            - id:
+                $fromResult:
+                  tool: finance.fetch_receipt
+                  path: expenseId
+                  whereResult:
+                    verified: true
+        select: id
+```
+
+The comparison operators are `$lessThan`, `$atMost`, `$greaterThan`, and
+`$atLeast`. They are criteria values. The subject is the value read from the
+criteria path. The accepted bound forms are a literal number, `$argument`, or
+`$fromResult`; reference bounds resolve through the same machinery as other
+criteria values. Both subject and bound must be finite numbers. A string such as
+`"100"` does not compare as 100; the criterion does not match, and a reference
+with no matching candidate reports
+`tool.arguments_reference_unresolved`.
+
+The linter rejects a comparison bound that is not a number, `$argument`, or
+`$fromResult`, and it rejects a comparison object that has any sibling key. A
+comparison object with both `$lessThan` and `$atLeast` is invalid because the
+operator must be the only property of that object. Nested `$fromResult` bounds
+are validated with the same reference rules as other criteria values. An
+`$argument` bound reads from the call under test.
+
+`callIndex` cannot be combined with `where` or `whereResult`: a correlation
+selects a call by key, and mixing the two would silently reintroduce the
+positional constraint the correlation exists to remove. The linter rejects either
+combination.
 
 A correlation that resolves to nothing reports
 `tool.arguments_reference_unresolved`. It never passes vacuously, so a join key
@@ -521,8 +639,8 @@ that is absent from the producing result is a finding, not a silent skip.
 One correlated expectation replaced three `callIndex` pins in the reference
 contract. Measured effect at the time: the mutation score held at 96.7% with no
 kill lost, the false-positive count fell from 8 to 7, and the last remaining
-over-blocked equivalent mutant cleared to zero. Both numbers have moved since —
-the corpus has grown and the remaining false positives have been closed — but
+over-blocked equivalent mutant cleared to zero. Both numbers have moved since,
+the corpus has grown and the remaining false positives have been closed, but
 the shape of that result is the point: precision improved without costing
 recall.
 
@@ -548,33 +666,90 @@ because none can ever resolve.
 ## Selection policies
 
 A join criterion is a conjunction by default. Real selection policies are often
-disjunctive — "high signal" may mean severity `S1` *or* priority `1` — and the
-only way to express that with conjunctions is to enumerate the records the
-baseline happened to contain, which is the literal-pinning problem again.
+disjunctive: an expense is escalatable if it is at or above the auto-approve
+limit, or if the receipt lookup came back unverified. Enumerating the ids in one
+fixture would pin the contract to that fixture instead of stating the policy.
 
-`$anyOf` takes at least two alternative criteria objects and matches when any one
-of them matches. The surrounding keys still apply:
+Criteria-level `$anyOf` is a key inside `where`, `whereResult`, or `find`. Its
+branches are criteria objects, and it matches when any branch matches. Sibling
+criteria keys still apply:
 
 ```yaml
-- tool: ado.update_work_item
+- tool: finance.escalate_expense
   match:
-    id:
+    expenseId:
       $fromResult:
-        tool: ado.query_untriaged_bugs
-        path: bugs
+        tool: finance.list_pending
+        path: expenses
         find:
           id:
-            $argument: id
+            $argument: expenseId
           $anyOf:
-            - severity: S1
-            - priority: 1
+            - amount:
+                $atLeast:
+                  $fromResult:
+                    tool: finance.get_policy
+                    path: autoApproveUnder
+            - id:
+                $fromResult:
+                  tool: finance.fetch_receipt
+                  path: expenseId
+                  whereResult:
+                    verified: false
         select: id
 ```
 
-This states that every update must target a bug the backlog reports as high
-signal. An update aimed at anything else finds no matching record, so the
+Read with the surrounding `id` key, this says: choose the pending expense whose
+id is the current escalation's `expenseId`, and require either an amount at or
+above the policy limit or a receipt result for that id whose `verified` flag is
+false. An escalation aimed at anything else finds no matching record, so the
 reference cannot resolve and `tool.arguments_reference_unresolved` is reported.
-The policy is stated once and holds for any backlog.
+Linting rejects criteria-level `$anyOf` unless it is an array of at least two
+alternatives. Each alternative is then validated as its own criteria object.
+
+## Mutually exclusive expected values
+
+`$anyOf` can also appear where an expected value appears. This is a different
+construct from criteria-level `$anyOf`: the branches are expected values, not
+criteria objects. The expense steward uses it to make a notification agree with
+whichever action actually changed that expense:
+
+```yaml
+- tool: notify.submitter
+  match:
+    decision:
+      $anyOf:
+        - $fromResult:
+            tool: finance.approve_expense
+            path: state
+            where:
+              expenseId:
+                $argument: expenseId
+        - $fromResult:
+            tool: finance.escalate_expense
+            path: state
+            where:
+              expenseId:
+                $argument: expenseId
+```
+
+In an argument or outcome `match` tree, `walk` tries each branch against the
+actual value and the value matches if any branch matches. Inside result-reference
+criteria, `resolveExpectedValues` handles the same shape as a value and returns
+the union of the candidate sets from its branches. These are separate matchers,
+and both support `$anyOf`.
+
+The union is not a weakening. Each branch still has to resolve from real
+evidence. If every branch resolves to nothing, the enclosing reference is
+unresolvable and the call is reported. For an argument expectation, that report
+is `tool.arguments_reference_unresolved`. A notification
+for an expense that was neither approved nor escalated therefore fails instead of
+passing through an empty disjunction.
+
+For match trees, scenario linting rejects a `$anyOf` that is not an array of at
+least two alternatives, and rejects a `$anyOf` object that has any sibling key.
+The same check recurses into every branch, so a malformed nested disjunction is
+reported before evaluation.
 
 ## Derived outcomes
 
@@ -683,7 +858,7 @@ staying silent: reporting `attempted: true` without the matching call is already
 A contract judges one run at a time. That makes an entire defect class invisible:
 a report whose *shape* depends on the run. Three GitHub Copilot runs against an
 identical prompt and identical fixtures produced 23 paths that appeared in some
-runs and not others — the ring advance reported as `ringAdvance` in two runs and
+runs and not others: the ring advance reported as `ringAdvance` in two runs and
 `rollout.advanceAttempt` in the third, an owner reported as `routed[].owner` then
 `routed[].assignedTo`, the reviewed set as `reviewed.bugs`, `reviewed.bugIds`,
 and `reviewed.untriagedBugs`. Every one of those reports is internally coherent.

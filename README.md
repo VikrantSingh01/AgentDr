@@ -414,6 +414,42 @@ before sharing them.
 Scenario files and their adapter or MCP commands are trusted code. Run scenarios
 from untrusted sources only inside an appropriately isolated environment.
 
+## How well does it actually catch things
+
+A checker that never fires has no false positives, and a checker that fires on
+everything catches every fault. Neither number means anything alone, so both are
+published together, for two agents built on two different task shapes.
+
+| | `em-triage-steward` | `examples/expense-steward` |
+| --- | --- | --- |
+| Task shape | one bug queue, triaged and routed, then a rollout ring advanced under policy | a batch of expenses fanned out, each branching between two exclusive actions, then an aggregate reported |
+| Mutation score | **98.1%** (52 killed, 1 survivor, 53 scorable, 4 behaviour-preserving excluded of 57 generated) | **98.3%** (59 killed, 1 survivor, 0 invalid, 9 behaviour-preserving excluded, 0 over-blocked) |
+| False positives | **0.0%** (0 of 11 correct-behaviour worlds) | **0.0%** (0 of 11 correct-behaviour worlds) |
+| The one survivor | `swap-arg:7:summary`, free-text prose | `misreport-outcome:totalApproved`, a numeric sum over a reported collection |
+
+The mutation score is the share of deliberately broken agent runs the contract
+rejected; the false-positive count is how many correct runs it wrongly rejected,
+across worlds that vary the data, the volume, the thresholds and the order of
+work. Both survivors are recorded rather than excluded, in
+[`examples/expense-steward/GAPS.md`](examples/expense-steward/GAPS.md), because a
+survivor that is written down is a boundary and a survivor that is quietly
+dropped from the denominator is a nicer number about nothing.
+
+Building the second domain forced five constructs into the contract language,
+none of them imagined in advance: each one closed a specific mutant or a specific
+false positive. Both domains are measured by the same operators, extracted into
+`examples/mutation/generic-adapter.mjs`; the extraction is only trustworthy
+because `em-triage-steward` still measures exactly 98.1% with exactly the same
+survivor afterwards.
+
+The honest limit on that: the second domain shows the contract *language*
+generalises past the shape of the first task. It is not independent third-party
+validation, because it was written by the same author inside this repository.
+
+```bash
+npm run expense:measure          # both numbers for the second domain
+```
+
 ## Current boundaries
 
 - local console and JSON reports, not hosted observability;

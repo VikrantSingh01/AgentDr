@@ -41,6 +41,24 @@ positives. The instrument is sharp at catching real defects and now tolerates
 the measured correct-behaviour worlds. That is not a general PMF claim; it is
 one contract, one agent, and one task.
 
+A second reference domain, `examples/expense-steward`, now measures the same pair
+on a deliberately different task topology: a batch fanned out over records, each
+branching between two mutually exclusive actions, with an aggregate reported at
+the end. It scores **98.3% mutation (59 killed, 1 survivor, 0 invalid, 9
+behaviour-preserving excluded, 0 over-blocked)** with **0 of 11 correct-behaviour
+worlds rejected (0.0%)**. Both domains are measured by the same extracted
+operators, and the extraction is only credible because `em-triage-steward` still
+measures exactly 98.1% with the same survivor after moving onto them.
+
+What that buys is specific. It prices the risk that the contract language was
+shaped around one workload and would not express another, which nothing had
+priced before. It does not buy independence: the second agent was written by the
+same author inside this repository. The two remaining survivors mark two
+different articulable limits, free-text prose in the first domain and a numeric
+sum over a reported collection in the second, and both are recorded in
+`examples/expense-steward/GAPS.md` rather than dropped from the denominator.
+
+
 The current mutation run generates 57 mutants from 7 operators and scores 53 of
 them: 52 killed and 1 survivor. It found 0 invalid mutants and excluded 4
 behaviour-preserving ones. Excluding behaviour-preserving mutants is not score
@@ -331,7 +349,10 @@ The next design-partner conversations should determine:
 6. Will teams accept a local JSON report, or do they require JUnit, SARIF, HTML,
    or hosted trend reporting?
 7. Do the 98.1% mutation score and 0 false-positive result reproduce across
-   other agents, contracts, and tasks?
+   other agents, contracts, and tasks? A second domain inside this repository,
+   `examples/expense-steward`, now measures 98.3% with 0 of 11 false positives on
+   a different task topology, which prices language overfitting but not
+   independence; the open part of this question is a third-party agent.
 
 ## Decision
 
