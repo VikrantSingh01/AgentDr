@@ -216,7 +216,7 @@ describe("strict precedence between tools", () => {
     expect(findingIds(scenario, late)).toContain("tool.precedence");
   });
 
-  it("stays silent when either side never happened", () => {
+  it("stays silent when the dependent call never happened, and reports when its prerequisite did not", () => {
     const onlyUpdates: EvidenceEvent[] = [
       toolCall(1, "ado.update_work_item", { id: 4821 }),
       finalEvent({ routed: [] })
@@ -225,8 +225,44 @@ describe("strict precedence between tools", () => {
       toolCall(1, "teams.post_escalation", { channel: "leads" }),
       finalEvent({ routed: [] })
     ];
+    // Nothing depended on anything, so there is nothing to order.
     expect(findingIds(scenario, onlyUpdates)).toEqual([]);
-    expect(findingIds(scenario, onlyEscalation)).toEqual([]);
+    // The agent escalated without ever doing the work the escalation was meant
+    // to follow. Reading the rule as vacuously true here would let exactly the
+    // behaviour it exists to prevent through.
+    expect(findingIds(scenario, onlyEscalation)).toEqual(["tool.precedence_missing"]);
+  });
+
+  it("permits the prerequisite to be repeated after the fact when scoped to the first call", () => {
+    const verifyAfterActing: EvidenceEvent[] = [
+      toolCall(1, "ado.update_work_item", { id: 4821 }),
+      toolCall(2, "teams.post_escalation", { channel: "leads" }),
+      toolCall(3, "ado.update_work_item", { id: 4824 }),
+      finalEvent({ routed: [] })
+    ];
+    const scoped = scenarioWith({
+      precedence: [
+        { before: "ado.update_work_item", after: "teams.post_escalation", scope: "first" }
+      ]
+    });
+    // The default reading forbids this, which punishes an agent for going back
+    // and finishing the work after it raised the escalation.
+    expect(findingIds(scenario, verifyAfterActing)).toContain("tool.precedence");
+    expect(findingIds(scoped, verifyAfterActing)).toEqual([]);
+  });
+
+  it("still catches an uninformed action when scoped to the first call", () => {
+    const actedFirst: EvidenceEvent[] = [
+      toolCall(1, "teams.post_escalation", { channel: "leads" }),
+      toolCall(2, "ado.update_work_item", { id: 4821 }),
+      finalEvent({ routed: [] })
+    ];
+    const scoped = scenarioWith({
+      precedence: [
+        { before: "ado.update_work_item", after: "teams.post_escalation", scope: "first" }
+      ]
+    });
+    expect(findingIds(scoped, actedFirst)).toEqual(["tool.precedence"]);
   });
 
   it("is observable mid-run for pre-dispatch enforcement", () => {

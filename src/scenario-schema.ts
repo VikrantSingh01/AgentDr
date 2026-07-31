@@ -249,7 +249,8 @@ export const scenarioSchema = {
                 required: ["before", "after"],
                 properties: {
                   before: { type: "string", minLength: 1 },
-                  after: { type: "string", minLength: 1 }
+                  after: { type: "string", minLength: 1 },
+                  scope: { enum: ["all", "first"] }
                 }
               }
             },

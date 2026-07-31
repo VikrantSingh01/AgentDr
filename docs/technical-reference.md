@@ -90,6 +90,58 @@ a pass. Scenario linting rejects a tool listed both unconditionally and
 conditionally, a condition declaring neither `equals` nor `nonEmpty`, a condition
 declaring both, and `nonEmpty: false`, which states no condition at all.
 
+## Ordering scope
+
+A precedence rule says one call depends on another. By default it reads as a
+statement about every pair: every `before` call must precede every `after` call.
+That reading also forbids calling `before` again *after* the action, which is how
+a careful agent verifies what it just did. `scope: first` narrows the rule to the
+obligation that was actually intended — the first action must be informed:
+
+```yaml
+expect:
+  tools:
+    precedence:
+      - before: ecs.get_rollout_status
+        after: ecs.advance_rollout_ring
+        scope: first
+```
+
+Under `scope: first`, reading the status, advancing the ring, then reading the
+status again passes. Under the default it reports `tool.precedence`. Advancing
+before ever reading still reports under both.
+
+In both scopes, an `after` call with no `before` call anywhere in the run reports
+`tool.precedence_missing`. Reading that case as vacuously true would let through
+exactly the behaviour the rule exists to prevent: the dependent action ran and
+its prerequisite never happened at all.
+
+## Finding causality
+
+A contract's `expect.outcome.schema` is its definition of a well-formed report.
+When the report does not satisfy it, every expectation that reads a path out of
+that report fails for the same reason — conditional obligations cannot resolve
+their condition, `callsMatchOutcome` cannot find its array, `$fromOutcome`
+references cannot resolve, and `outcome.match` cannot match.
+
+Those findings carry `causedBy: "outcome.output_schema"`. Nothing is suppressed:
+every finding is still reported, severities are unchanged, and the exit code is
+unchanged. What changes is that the terminal output prints consequences beneath
+the failure they follow from, so a run with one malformed report is described as
+one problem rather than seven:
+
+```
+ERROR Final output failed JSON Schema validation [evidence #61]
+  3 further finding(s) follow from this:
+    ERROR Conditional requirement for teams.post_escalation reads final output path escalatedBugIds, which was not reported
+    ERROR Arguments for ecs.advance_rollout_ring reference a prior result that was not observed: $fromOutcome.ringAdvance.fromRing
+    ERROR Final output did not contain the expected values
+```
+
+`tool.arguments_reference_unresolved` is attributed only when the unresolved
+reference is a `$fromOutcome`. A `$fromResult` reference reads a tool result, not
+the report, so it is an independent finding.
+
 ## Scoped expectations
 
 Run-wide expectations overfit or under-constrain whenever a tool is called more

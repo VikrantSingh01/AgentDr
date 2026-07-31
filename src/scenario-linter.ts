@@ -156,11 +156,21 @@ export function lintScenario(
         `Precedence rules require ${rule.before} before ${rule.after} and ${rule.after} before ${rule.before}, which cannot both hold`
       );
     }
-    const beforeIndex = (tools?.order ?? []).lastIndexOf(rule.before);
+    const beforeIndex =
+      rule.scope === "first"
+        ? (tools?.order ?? []).indexOf(rule.before)
+        : (tools?.order ?? []).lastIndexOf(rule.before);
     const afterIndex = (tools?.order ?? []).indexOf(rule.after);
     if (beforeIndex !== -1 && afterIndex !== -1 && beforeIndex > afterIndex) {
       errors.push(
         `Precedence rule ${rule.before} before ${rule.after} contradicts the declared order`
+      );
+    }
+    // The rule now reports when `before` never happened, so forbidding `before`
+    // while requiring it to precede `after` cannot be satisfied by any run.
+    if ((tools?.forbidden ?? []).includes(rule.before)) {
+      errors.push(
+        `Precedence rule requires ${rule.before} before ${rule.after}, but ${rule.before} is forbidden`
       );
     }
   }

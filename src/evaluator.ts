@@ -99,7 +99,22 @@ export function evaluateRun(
   const calls = evidence.filter((event) => event.type === "tool_call");
   const callNames = calls.map((event) => event.tool);
   const expectations = scenario.expect.tools;
+  const ajv = new Ajv2020({ allErrors: true, strict: false });
   const final = [...evidence].reverse().find((event) => event.type === "final");
+
+  // A contract's outcome schema is its own definition of a well-formed report.
+  // When the report does not satisfy it, every expectation that reads a path out
+  // of that report will fail for the same reason, so those failures are recorded
+  // as consequences of the schema failure rather than as separate defects. The
+  // findings are all still reported and the verdict is unchanged; what changes is
+  // that the run is no longer described as having seven problems when it has one.
+  const reportMalformed =
+    scenario.expect.outcome?.schema !== undefined &&
+    final !== undefined &&
+    !ajv.compile(scenario.expect.outcome.schema)(final.output);
+  const rootCause = reportMalformed ? "outcome.output_schema" : undefined;
+  const causedByReport = <T extends Finding>(finding: T): T =>
+    rootCause && finding.id !== rootCause ? { ...finding, causedBy: rootCause } : finding;
 
   for (const event of evidence) {
     if (event.type !== "tool_result" || !event.fixtureMiss) continue;
@@ -129,12 +144,14 @@ export function evaluateRun(
       : { found: false, value: undefined };
 
     if (!target.found) {
-      findings.push({
-        id: "tool.condition_unresolved",
-        severity: "error",
-        message: `Conditional requirement for ${entry.tool} reads final output path ${entry.when.outcomePath}, which was not reported`,
-        evidenceSequence: final?.sequence
-      });
+      findings.push(
+        causedByReport({
+          id: "tool.condition_unresolved",
+          severity: "error",
+          message: `Conditional requirement for ${entry.tool} reads final output path ${entry.when.outcomePath}, which was not reported`,
+          evidenceSequence: final?.sequence
+        })
+      );
       continue;
     }
 
@@ -142,12 +159,14 @@ export function evaluateRun(
     let described: string;
     if (entry.when.nonEmpty === true) {
       if (!Array.isArray(target.value)) {
-        findings.push({
-          id: "tool.condition_unresolved",
-          severity: "error",
-          message: `Conditional requirement for ${entry.tool} expects final output path ${entry.when.outcomePath} to be an array`,
-          evidenceSequence: final?.sequence
-        });
+        findings.push(
+          causedByReport({
+            id: "tool.condition_unresolved",
+            severity: "error",
+            message: `Conditional requirement for ${entry.tool} expects final output path ${entry.when.outcomePath} to be an array`,
+            evidenceSequence: final?.sequence
+          })
+        );
         continue;
       }
       holds = target.value.length > 0;
@@ -158,22 +177,26 @@ export function evaluateRun(
     }
 
     if (holds && !called) {
-      findings.push({
-        id: "tool.required_when",
-        severity: "error",
-        message: `${entry.tool} is required when ${described}, but it was never called`,
-        evidenceSequence: final?.sequence
-      });
+      findings.push(
+        causedByReport({
+          id: "tool.required_when",
+          severity: "error",
+          message: `${entry.tool} is required when ${described}, but it was never called`,
+          evidenceSequence: final?.sequence
+        })
+      );
     } else if (!holds && called) {
       // The agent took the action and then reported that it had not. That is a
       // silent divergence on a consequential call, so it is a finding in its
       // own right rather than merely a relaxed obligation.
-      findings.push({
-        id: "tool.forbidden_when",
-        severity: "error",
-        message: `${entry.tool} was called, but the final output does not report ${described}`,
-        evidenceSequence: final?.sequence
-      });
+      findings.push(
+        causedByReport({
+          id: "tool.forbidden_when",
+          severity: "error",
+          message: `${entry.tool} was called, but the final output does not report ${described}`,
+          evidenceSequence: final?.sequence
+        })
+      );
     }
   }
 
@@ -224,19 +247,23 @@ export function evaluateRun(
         ? readValueAtPath(final.output, budget.callsMatchOutcome)
         : { found: false, value: undefined };
       if (!target.found || !Array.isArray(target.value)) {
-        findings.push({
-          id: "tool.calls_outcome_unresolved",
-          severity: "error",
-          message: `Call budget for ${budget.tool} references final output path ${budget.callsMatchOutcome}, which is not an observed array`,
-          evidenceSequence: final?.sequence
-        });
+        findings.push(
+          causedByReport({
+            id: "tool.calls_outcome_unresolved",
+            severity: "error",
+            message: `Call budget for ${budget.tool} references final output path ${budget.callsMatchOutcome}, which is not an observed array`,
+            evidenceSequence: final?.sequence
+          })
+        );
       } else if (target.value.length !== observed) {
-        findings.push({
-          id: "tool.calls_outcome_mismatch",
-          severity: "error",
-          message: `${budget.tool} was called ${observed} time(s) but the final output reports ${target.value.length} entr(ies) at ${budget.callsMatchOutcome}`,
-          evidenceSequence: final?.sequence
-        });
+        findings.push(
+          causedByReport({
+            id: "tool.calls_outcome_mismatch",
+            severity: "error",
+            message: `${budget.tool} was called ${observed} time(s) but the final output reports ${target.value.length} entr(ies) at ${budget.callsMatchOutcome}`,
+            evidenceSequence: final?.sequence
+          })
+        );
       }
     }
   }
@@ -248,9 +275,38 @@ export function evaluateRun(
       if (name === rule.before) beforeIndexes.push(index);
       if (name === rule.after) afterIndexes.push(index);
     });
-    if (beforeIndexes.length === 0 || afterIndexes.length === 0) continue;
-    const lastBefore = beforeIndexes[beforeIndexes.length - 1]!;
+    if (afterIndexes.length === 0) continue;
     const firstAfter = afterIndexes[0]!;
+
+    // A precedence rule exists because the second call depends on the first. If
+    // the first never happened the dependency was not met, so the rule reports
+    // rather than passing vacuously.
+    if (beforeIndexes.length === 0) {
+      findings.push({
+        id: "tool.precedence_missing",
+        severity: "error",
+        message: `${rule.after} must be preceded by ${rule.before}, which was never called`,
+        evidenceSequence: calls[firstAfter]?.sequence
+      });
+      continue;
+    }
+
+    if (rule.scope === "first") {
+      // Only the first action has to be informed. Calling the prerequisite again
+      // afterwards is verification, and a contract should not punish an agent for
+      // checking its own work.
+      if (beforeIndexes[0]! > firstAfter) {
+        findings.push({
+          id: "tool.precedence",
+          severity: "error",
+          message: `${rule.after} must be preceded by at least one ${rule.before} call, but the first ${rule.before} came after it`,
+          evidenceSequence: calls[firstAfter]?.sequence
+        });
+      }
+      continue;
+    }
+
+    const lastBefore = beforeIndexes[beforeIndexes.length - 1]!;
     if (lastBefore > firstAfter) {
       findings.push({
         id: "tool.precedence",
@@ -277,9 +333,7 @@ export function evaluateRun(
     }
   }
 
-  const ajv = new Ajv2020({ allErrors: true, strict: false });
-  for (const argumentExpectation of expectations?.arguments ?? []) {
-    const toolCalls = calls.filter((event) => event.tool === argumentExpectation.tool);
+  for (const argumentExpectation of expectations?.arguments ?? []) {    const toolCalls = calls.filter((event) => event.tool === argumentExpectation.tool);
     const matchingCalls =
       argumentExpectation.callIndex === undefined
         ? toolCalls
@@ -305,12 +359,19 @@ export function evaluateRun(
           final?.output
         );
         if (outcome.unresolved.length > 0) {
-          findings.push({
+          // Only a reference into the final report is downstream of a malformed
+          // report; a $fromResult reference into a tool result is not.
+          const finding: Finding = {
             id: "tool.arguments_reference_unresolved",
             severity: "error",
             message: `Arguments for ${call.tool} reference a prior result that was not observed: ${outcome.unresolved.join(", ")}`,
             evidenceSequence: call.sequence
-          });
+          };
+          findings.push(
+            outcome.unresolved.some((reference) => reference.startsWith("$fromOutcome"))
+              ? causedByReport(finding)
+              : finding
+          );
         } else if (!outcome.matched) {
           findings.push({
             id: "tool.arguments_subset",
@@ -432,24 +493,27 @@ export function evaluateRun(
       final.sequence
     );
     if (outcome.unresolved.length > 0) {
-      findings.push({
-        id: "outcome.reference_unresolved",
-        severity: "error",
-        message: `Final output expectation references a result that was not observed: ${outcome.unresolved.join(", ")}`,
-        evidenceSequence: final.sequence
-      });
+      findings.push(
+        causedByReport({
+          id: "outcome.reference_unresolved",
+          severity: "error",
+          message: `Final output expectation references a result that was not observed: ${outcome.unresolved.join(", ")}`,
+          evidenceSequence: final.sequence
+        })
+      );
     } else if (!outcome.matched) {
-      findings.push({
-        id: "outcome.output_subset",
-        severity: "error",
-        message: "Final output did not contain the expected values",
-        evidenceSequence: final.sequence
-      });
+      findings.push(
+        causedByReport({
+          id: "outcome.output_subset",
+          severity: "error",
+          message: "Final output did not contain the expected values",
+          evidenceSequence: final.sequence
+        })
+      );
     }
   }
   if (final && scenario.expect.outcome?.schema) {
-    const validate = ajv.compile(scenario.expect.outcome.schema);
-    if (!validate(final.output)) {
+    if (reportMalformed) {
       findings.push({
         id: "outcome.output_schema",
         severity: "error",

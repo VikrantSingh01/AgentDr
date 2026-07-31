@@ -1,6 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import type { RunReport } from "./types.js";
+import type { Finding, RunReport } from "./types.js";
 
 export function escapeGitHubCommandValue(value: string): string {
   return value
@@ -70,7 +70,13 @@ export function printRunReport(report: RunReport, reportPath: string): void {
         ? "ERROR"
         : "FAIL";
   console.log(`${label} ${report.scenarioId} (${report.durationMs}ms)`);
-  for (const finding of report.decision.findings) {
+  // Findings that only exist because an earlier expectation already failed are
+  // printed underneath the failure they follow from, so the list reads as the
+  // number of things actually wrong rather than the number of checks that
+  // tripped over the same cause.
+  const independent = report.decision.findings.filter((finding) => !finding.causedBy);
+  const derived = report.decision.findings.filter((finding) => finding.causedBy);
+  const printFinding = (finding: Finding, indent: string): void => {
     const sequence = finding.evidenceSequence
       ? ` [evidence #${finding.evidenceSequence}]`
       : "";
@@ -78,12 +84,25 @@ export function printRunReport(report: RunReport, reportPath: string): void {
       process.env.GITHUB_ACTIONS === "true"
         ? singleLineTerminalValue(finding.message)
         : finding.message;
-    console.log(`  ${finding.severity.toUpperCase()} ${displayMessage}${sequence}`);
+    console.log(`${indent}${finding.severity.toUpperCase()} ${displayMessage}${sequence}`);
 
     if (process.env.GITHUB_ACTIONS === "true") {
       const command = finding.severity === "critical" ? "error" : "warning";
       console.log(`::${command}::${escapeGitHubCommandValue(finding.message)}`);
     }
+  };
+
+  for (const finding of independent) {
+    printFinding(finding, "  ");
+    const consequences = derived.filter((other) => other.causedBy === finding.id);
+    if (consequences.length === 0) continue;
+    console.log(`    ${consequences.length} further finding(s) follow from this:`);
+    for (const consequence of consequences) printFinding(consequence, "      ");
+  }
+  for (const finding of derived) {
+    // A consequence whose cause is not itself reported still has to be shown.
+    if (independent.some((other) => other.id === finding.causedBy)) continue;
+    printFinding(finding, "  ");
   }
   console.log(`Evidence: ${reportPath}`);
 }

@@ -104,6 +104,13 @@ export interface Scenario {
       precedence?: Array<{
         before: string;
         after: string;
+        /**
+         * `all` (the default) requires every `before` call to precede every
+         * `after` call. `first` requires only that the first `after` call be
+         * preceded by a `before` call, which leaves an agent free to call
+         * `before` again afterwards to verify what it just did.
+         */
+        scope?: "all" | "first";
       }>;
       maxCalls?: number;
       budgets?: Array<{
@@ -209,6 +216,13 @@ export interface Finding {
   severity: Severity;
   message: string;
   evidenceSequence?: number;
+  /**
+   * The id of the finding this one follows from. A finding that is only
+   * reachable because an earlier expectation already failed is a consequence,
+   * not an independent defect, and counting it as one overstates how much is
+   * wrong with the run.
+   */
+  causedBy?: string;
 }
 
 export interface Decision {
