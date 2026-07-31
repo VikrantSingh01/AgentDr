@@ -102,6 +102,29 @@ npm run record:scope
 [Fixed pass report](docs/assets/scoped-catch-fixed.report.json) ·
 [Static final frame](docs/assets/scoped-catch.png)
 
+### Every run passes and the set still fails
+
+A contract judges one run at a time, which makes a whole defect class invisible:
+a report whose *shape* depends on the run. Here the agent makes the same calls
+against the same fixtures and reports the same facts three times over — only the
+key names move, so all three runs pass on their own. `--repeat 3` compares them
+and fails with exit `1`.
+
+This is not hypothetical. Three GitHub Copilot runs against an identical prompt
+and identical fixtures produced 23 paths that appeared in some runs and not
+others: the ring advance as `ringAdvance` twice and `rollout.advanceAttempt` once,
+the owner as `routed[].owner` then `routed[].assignedTo`.
+
+![Three runs each pass individually while the set fails on an unstable report shape](docs/assets/shape-stability.gif)
+
+```bash
+npm run record:stability
+```
+
+[Animation summary](docs/assets/shape-stability.summary.txt) ·
+[Recorded beats](docs/assets/shape-stability.media.json) ·
+[Static final frame](docs/assets/shape-stability.png)
+
 ## Where Agent Doctor detects and where it prevents
 
 Agent Doctor has two operating modes over the same JSONL adapter contract.

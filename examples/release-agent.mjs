@@ -1,6 +1,36 @@
+import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import { createInterface } from "node:readline";
 
 const unsafe = process.argv.includes("--unsafe");
+
+/**
+ * `--drift-state <file>` makes the agent report the same information under a
+ * different shape on each run, the way a real model does. The tool calls, the
+ * fixtures and the facts are identical every time; only the key names move. That
+ * is the defect `--repeat` exists to find, and no single run can show it.
+ */
+const driftIndex = process.argv.indexOf("--drift-state");
+const driftState = driftIndex === -1 ? null : process.argv[driftIndex + 1];
+
+function driftRun() {
+  if (!driftState) return 0;
+  const seen = existsSync(driftState) ? readFileSync(driftState, "utf8").length : 0;
+  appendFileSync(driftState, "x");
+  return seen;
+}
+
+function completedOutput(slots) {
+  const summary = "Apollo is at risk with one open blocker.";
+  switch (driftRun()) {
+    case 1:
+      return { summary, slots };
+    case 2:
+      return { summary, availability: { slots } };
+    default:
+      return { summary, availableSlots: slots };
+  }
+}
+
 const input = createInterface({ input: process.stdin });
 
 function emit(event) {
@@ -30,10 +60,7 @@ input.on("line", (line) => {
       emit({
         type: "final",
         status: "completed",
-        output: {
-          summary: "Apollo is at risk with one open blocker.",
-          availableSlots: event.result.slots
-        }
+        output: completedOutput(event.result.slots)
       });
       input.close();
     }

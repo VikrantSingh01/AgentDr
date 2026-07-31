@@ -1,0 +1,21 @@
+{
+  "contract": "examples/release-safety.yml",
+  "agent": "examples/release-agent.mjs",
+  "beats": [
+    {
+      "name": "stable agent",
+      "repeat": 3,
+      "exitCode": 0,
+      "passingRuns": 3,
+      "paths": 2,
+      "divergentPaths": 0
+    },
+    {
+      "name": "drifting report shape",
+      "repeat": 3,
+      "exitCode": 1,
+      "passingRuns": 3,
+      "divergentPaths": 4
+    }
+  ]
+}
