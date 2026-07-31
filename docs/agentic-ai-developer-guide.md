@@ -249,9 +249,9 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 The JSON report remains the diagnostic source of truth. Terminal output names each finding and its evidence sequence, and GitHub Actions receives annotations when that environment is detected. In GitHub Actions, the human-readable finding line renders carriage returns and line feeds as the visible sequences `\r` and `\n`, while the annotation escapes `%` as `%25`, carriage return as `%0D`, and line feed as `%0A`. Both output paths therefore keep a multiline finding from opening a second workflow-command line.
 
-## What 81 Tests Across 13 Files Actually Demonstrate
+## What 107 Tests Across 14 Files Actually Demonstrate
 
-The current suite contains exactly 81 tests across 13 files. Its value is not the number; it is the range of deliberately hostile conditions around the contract boundary.
+The current suite contains exactly 107 tests across 14 files. Its value is not the number; it is the range of deliberately hostile conditions around the contract boundary.
 
 The tests reject invalid JSONL, array arguments, duplicate call IDs, output after `final`, a final event racing an asynchronous result, inherited fixture properties, nonzero child exits, and invalid report files. They verify forced termination after ignored graceful shutdown, including POSIX process-group descendants, and preserve exit `3` when an observed critical violation is followed by a crash. Scenario tests cover inline, file, argument-aware, and call-index-aware fixtures; reject duplicate or unreachable selectors and contradictory policies; validate Draft 2020-12 schemas; and reject reserved redaction keys that would corrupt policy or event structure.
 

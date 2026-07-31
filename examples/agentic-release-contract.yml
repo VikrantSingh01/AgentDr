@@ -42,6 +42,10 @@ expect:
         match:
           title: Apollo release review
           durationMinutes: 30
+          startsAt:
+            $fromResult:
+              tool: calendar.check_availability
+              path: slots.0
   confirmation:
     requiredBefore:
       - calendar.create_event

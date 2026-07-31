@@ -10,6 +10,25 @@ export const scenarioSchema = {
         $file: { type: "string", minLength: 1 }
       }
     },
+    resultReference: {
+      type: "object",
+      additionalProperties: false,
+      required: ["$fromResult"],
+      properties: {
+        $fromResult: {
+          type: "object",
+          additionalProperties: false,
+          required: ["tool", "path"],
+          properties: {
+            tool: { type: "string", minLength: 1 },
+            path: { type: "string", minLength: 1 },
+            sequence: { type: "array", minItems: 1 },
+            offset: { type: "integer" }
+          },
+          dependentRequired: { offset: ["sequence"] }
+        }
+      }
+    },
     fixtureSelection: {
       type: "object",
       additionalProperties: false,
@@ -168,7 +187,16 @@ export const scenarioSchema = {
                 required: ["tool"],
                 properties: {
                   tool: { type: "string", minLength: 1 },
-                  match: { type: "object" },
+                  match: {
+                    type: "object",
+                    additionalProperties: {
+                      if: {
+                        type: "object",
+                        required: ["$fromResult"]
+                      },
+                      then: { $ref: "#/$defs/resultReference" }
+                    }
+                  },
                   schema: { type: "object" }
                 }
               }

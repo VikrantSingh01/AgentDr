@@ -6,6 +6,7 @@ import type {
   Scenario
 } from "./types.js";
 import { isStructurallyEqual, isSubset } from "./value-match.js";
+import { matchWithReferences } from "./result-reference.js";
 
 export function evaluateMcpEvidence(
   scenario: Scenario,
@@ -155,16 +156,28 @@ export function evaluateRun(
   for (const argumentExpectation of expectations?.arguments ?? []) {
     const matchingCalls = calls.filter((event) => event.tool === argumentExpectation.tool);
     for (const call of matchingCalls) {
-      if (
-        argumentExpectation.match &&
-        !isSubset(argumentExpectation.match, call.arguments)
-      ) {
-        findings.push({
-          id: "tool.arguments_subset",
-          severity: "error",
-          message: `Arguments for ${call.tool} did not contain the expected values`,
-          evidenceSequence: call.sequence
-        });
+      if (argumentExpectation.match) {
+        const outcome = matchWithReferences(
+          argumentExpectation.match,
+          call.arguments,
+          evidence,
+          call.sequence
+        );
+        if (outcome.unresolved.length > 0) {
+          findings.push({
+            id: "tool.arguments_reference_unresolved",
+            severity: "error",
+            message: `Arguments for ${call.tool} reference a prior result that was not observed: ${outcome.unresolved.join(", ")}`,
+            evidenceSequence: call.sequence
+          });
+        } else if (!outcome.matched) {
+          findings.push({
+            id: "tool.arguments_subset",
+            severity: "error",
+            message: `Arguments for ${call.tool} did not contain the expected values`,
+            evidenceSequence: call.sequence
+          });
+        }
       }
       if (argumentExpectation.schema) {
         const validate = ajv.compile(argumentExpectation.schema);

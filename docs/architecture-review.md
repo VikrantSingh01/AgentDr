@@ -37,7 +37,7 @@ remain implementation work for any enforcement-grade mode.
 | High | The MCP flow is harness-proxied. | It validates the server and requested calls but not the child agent's own native MCP client implementation. | Demo wording corrected; native-client adapter needed for that claim. |
 | High | Safety contracts are opt-in. | Destructive tools or MCP annotations do not automatically require confirmation or prohibition. | Open product decision and policy-layer work. |
 | Medium | Snapshot checks classify exact normalized drift only. | A change is not automatically categorized as compatible, breaking, or certified safe. | Terminology corrected; compatibility analyzer is future work. |
-| Medium | Scenario semantic linting is incomplete. | Some schema-valid scenarios may still be vacuous or unable to exercise their assertions. | Core contradictions, impossible budgets, fixture reachability, and fully shadowed confirmation policies are linted; broader policy analysis remains planned. |
+| Medium | Scenario semantic linting is incomplete. | Some schema-valid scenarios may still be vacuous or unable to exercise their assertions. | Core contradictions, impossible budgets, fixture reachability, fully shadowed confirmation policies, and unresolvable derived-argument references are linted; broader policy analysis remains planned. |
 | Medium | Reports lack tamper-evident provenance. | Evidence does not independently prove the scenario, executable, fixtures, or report were unchanged. | Manifest and signing design planned. |
 | Medium | Execution topology is narrow. | The MVP supports one child adapter, one stdio MCP server, and sequential calls. | Multi-server, parallel, streaming, and HTTP support planned. |
 | Medium | Key-based redaction is not DLP. | Unknown, encoded, positional, or free-text secrets can remain in reports. | Boundary documented; minimize and sanitize test data. |
@@ -66,6 +66,9 @@ vulnerabilities in the repository.
 - Added optional pre-dispatch enforcement with requested, authorized, denied,
   dispatched, and completed evidence.
 - Added exact structural argument binding for one-use confirmation events.
+- Added derived-argument binding so an argument can be asserted against a value
+  observed in an earlier tool result, with unresolvable references reported
+  explicitly rather than passing silently.
 
 These changes close the harness-dispatch gap for configured fixture and MCP
 calls. They do not close identity, trusted approval issuance, isolation, or
@@ -114,7 +117,8 @@ Derive an inventory of mutating or destructive tools from configured policy and
 MCP annotations, while requiring explicit review rather than assuming server
 metadata is authoritative. Core linting now detects required/forbidden conflicts, impossible call budgets,
 forbidden ordered calls, duplicate fixture selectors, unreachable fixture cases,
-and confirmation policies fully shadowed by forbidden-tool enforcement. Continue
+confirmation policies fully shadowed by forbidden-tool enforcement, and
+derived-argument references that can never resolve. Continue
 with mutating-tool inventory, duplicate assertions, unprotected mutations, and
 fixture/result schema satisfiability.
 

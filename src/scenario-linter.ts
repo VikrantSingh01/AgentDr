@@ -1,5 +1,6 @@
-import type { ResolvedFixtures, Scenario } from "./types.js";
+import type { ResolvedFixtures, ResultReference, Scenario } from "./types.js";
 import { isStructurallyEqual, isSubset } from "./value-match.js";
+import { collectReferenceNodes, validateReference } from "./result-reference.js";
 
 export function lintScenario(
   scenario: Scenario,
@@ -68,6 +69,39 @@ export function lintScenario(
     errors.push(
       "Confirmation policy is unreachable under pre-dispatch enforcement because every confirmation-protected tool is forbidden"
     );
+  }
+
+  const order = tools?.order ?? [];
+  for (const argumentExpectation of tools?.arguments ?? []) {
+    for (const node of collectReferenceNodes(argumentExpectation.match)) {
+      const shapeErrors = validateReference(node);
+      if (shapeErrors.length > 0) {
+        for (const shapeError of shapeErrors) {
+          errors.push(
+            `Argument expectation for ${argumentExpectation.tool} is invalid: ${shapeError}`
+          );
+        }
+        continue;
+      }
+      const reference = node as ResultReference;
+      if (forbidden.has(reference.tool)) {
+        errors.push(
+          `Argument expectation for ${argumentExpectation.tool} references forbidden tool ${reference.tool}, so it can never resolve`
+        );
+        continue;
+      }
+      const referencedIndex = order.indexOf(reference.tool);
+      const referencingIndex = order.indexOf(argumentExpectation.tool);
+      if (
+        referencedIndex !== -1 &&
+        referencingIndex !== -1 &&
+        referencingIndex < referencedIndex
+      ) {
+        errors.push(
+          `Argument expectation for ${argumentExpectation.tool} references ${reference.tool}, which the declared order places later`
+        );
+      }
+    }
   }
 
   for (const [tool, fixture] of Object.entries(fixtures)) {

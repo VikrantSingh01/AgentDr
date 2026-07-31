@@ -243,7 +243,7 @@ See the [fixture contract](examples/agentic-release-contract.yml),
 - missing/duplicate tools, errors, timeouts, latency, and result-size budgets;
 - configured report redaction and partial failure evidence.
 
-The repository has **81 deterministic tests across 13 files** and **eight live
+The repository has **107 deterministic tests across 14 files** and **eight live
 MCP test cases**. There is no model judge or hidden-reasoning assertion.
 
 ## Exit codes
@@ -299,6 +299,9 @@ from untrusted sources only inside an appropriately isolated environment.
 - configured key-based redaction is not general DLP;
 - semantic linting covers core contradictions, enforcement reachability, and
   fixture reachability, not complete policy coverage;
+- argument expectations apply to every call of a tool, so per-call selectors are
+  not available; derived arguments can be bound to earlier tool results with
+  `$fromResult`, but conditional and per-tool budget policies cannot be expressed;
 - no tamper-evident provenance, HTTP, Microsoft Agents 365, or External Agents
   adapter yet.
 

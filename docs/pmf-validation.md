@@ -18,7 +18,7 @@ The current release proves that one local contract can:
 - preserve partial evidence and return stable CI exit codes;
 - sanitize configured sensitive values before report persistence.
 
-The repository currently passes 81 deterministic tests across 13 files and eight
+The repository currently passes 107 deterministic tests across 14 files and eight
 live MCP cases. Those results prove implementation quality. They do not prove
 that external teams have a recurring problem, can onboard independently, will
 retain scenarios, or will pay.

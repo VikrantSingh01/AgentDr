@@ -28,6 +28,13 @@ export interface McpConfiguration {
   };
 }
 
+export interface ResultReference {
+  tool: string;
+  path: string;
+  sequence?: unknown[];
+  offset?: number;
+}
+
 export interface FixtureCase {
   callIndex?: number;
   arguments?: Record<string, unknown>;

@@ -34,6 +34,7 @@ Current deterministic assertions include:
 - required and forbidden tools;
 - ordered tool subsequences and maximum calls;
 - argument subset and JSON Schema validation;
+- derived argument equality against values observed in earlier tool results;
 - one-use, tool-scoped or exact-argument-bound confirmation before protected calls;
 - optional pre-dispatch enforcement for forbidden and confirmation-protected calls;
 - semantic checks for core policy contradictions, enforcement reachability, and
@@ -75,7 +76,6 @@ Cases are tested top to bottom. `callIndex` is zero-based per tool and
 A result-only case is a catch-all and must be last. The loader also rejects
 duplicate selectors and broader earlier cases that would shadow later cases. No
 match is a runtime failure rather than a success-shaped fallback.
-
 Fixture replay runs the adapter live but replaces only responses to tool calls
 emitted through Agent Doctor's JSONL protocol. It is not recorded full-run
 playback, does not intercept arbitrary child-process side effects, and does not
@@ -231,6 +231,55 @@ npm pack --dry-run
 CI runs Node.js 20, 22, and 24 on Windows and Ubuntu, regenerates the scenario
 schema and MCP tool snapshot, runs the fixture smoke test, and validates the npm
 package.
+
+## Derived arguments
+
+`expect.tools.arguments[].match` compares literal values by default. An argument
+whose correct value is only known from an earlier tool result is bound with
+`$fromResult`:
+
+```yaml
+expect:
+  tools:
+    arguments:
+      - tool: calendar.create_event
+        match:
+          startsAt:
+            $fromResult:
+              tool: calendar.check_availability
+              path: slots.0
+      - tool: ecs.advance_rollout_ring
+        match:
+          toRing:
+            $fromResult:
+              tool: ecs.get_rollout_status
+              path: currentRing
+              sequence: [ring0, ring1, ring1_5, ring2]
+              offset: 1
+```
+
+`path` is a dot path into the result, and numeric segments index arrays. The
+argument must equal the referenced value in at least one `tool_result` from
+`tool` recorded strictly before the call under test. "At least one" rather than
+"the most recent" is deliberate, because an agent may legitimately cache a lookup
+and reuse it after unrelated intervening calls.
+
+With `sequence`, the expected value is the element `offset` positions after the
+observed value inside the declared domain. This expresses ordering over argument
+values, which `expect.tools.order` does not: `order` constrains tool names only.
+`offset` requires `sequence` and defaults to `1`.
+
+The reference resolves against recorded tool evidence, never against the agent's
+final output, so an agent that reports one value and dispatches another is
+detected rather than trusted.
+
+A reference that cannot resolve, because the referenced tool was never called
+before the call under test, the path is absent, or the observed value falls
+outside the declared sequence, produces
+`tool.arguments_reference_unresolved`. An observation the harness could not make
+is reported explicitly and is never treated as a pass. Scenario linting rejects a
+reference to a forbidden tool, and a reference whose target the declared `order`
+places later, because neither can ever resolve.
 
 ## Current boundaries
 
