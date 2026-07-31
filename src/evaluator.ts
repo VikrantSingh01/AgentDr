@@ -111,12 +111,68 @@ export function evaluateRun(
     });
   }
 
-  for (const tool of expectations?.required ?? []) {
-    if (!callNames.includes(tool)) {
+  for (const entry of expectations?.required ?? []) {
+    if (typeof entry === "string") {
+      if (!callNames.includes(entry)) {
+        findings.push({
+          id: "tool.required",
+          severity: "error",
+          message: `Required tool was not called: ${entry}`
+        });
+      }
+      continue;
+    }
+
+    const called = callNames.includes(entry.tool);
+    const target = final
+      ? readValueAtPath(final.output, entry.when.outcomePath)
+      : { found: false, value: undefined };
+
+    if (!target.found) {
       findings.push({
-        id: "tool.required",
+        id: "tool.condition_unresolved",
         severity: "error",
-        message: `Required tool was not called: ${tool}`
+        message: `Conditional requirement for ${entry.tool} reads final output path ${entry.when.outcomePath}, which was not reported`,
+        evidenceSequence: final?.sequence
+      });
+      continue;
+    }
+
+    let holds: boolean;
+    let described: string;
+    if (entry.when.nonEmpty === true) {
+      if (!Array.isArray(target.value)) {
+        findings.push({
+          id: "tool.condition_unresolved",
+          severity: "error",
+          message: `Conditional requirement for ${entry.tool} expects final output path ${entry.when.outcomePath} to be an array`,
+          evidenceSequence: final?.sequence
+        });
+        continue;
+      }
+      holds = target.value.length > 0;
+      described = `${entry.when.outcomePath} is non-empty`;
+    } else {
+      holds = isStructurallyEqual(entry.when.equals, target.value);
+      described = `${entry.when.outcomePath} is ${JSON.stringify(entry.when.equals)}`;
+    }
+
+    if (holds && !called) {
+      findings.push({
+        id: "tool.required_when",
+        severity: "error",
+        message: `${entry.tool} is required when ${described}, but it was never called`,
+        evidenceSequence: final?.sequence
+      });
+    } else if (!holds && called) {
+      // The agent took the action and then reported that it had not. That is a
+      // silent divergence on a consequential call, so it is a finding in its
+      // own right rather than merely a relaxed obligation.
+      findings.push({
+        id: "tool.forbidden_when",
+        severity: "error",
+        message: `${entry.tool} was called, but the final output does not report ${described}`,
+        evidenceSequence: final?.sequence
       });
     }
   }

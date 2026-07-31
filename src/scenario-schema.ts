@@ -199,7 +199,33 @@ export const scenarioSchema = {
           type: "object",
           additionalProperties: false,
           properties: {
-            required: { type: "array", uniqueItems: true, items: { type: "string" } },
+            required: {
+              type: "array",
+              uniqueItems: true,
+              items: {
+                anyOf: [
+                  { type: "string" },
+                  {
+                    type: "object",
+                    additionalProperties: false,
+                    required: ["tool", "when"],
+                    properties: {
+                      tool: { type: "string", minLength: 1 },
+                      when: {
+                        type: "object",
+                        additionalProperties: false,
+                        required: ["outcomePath"],
+                        properties: {
+                          outcomePath: { type: "string", minLength: 1 },
+                          equals: {},
+                          nonEmpty: { type: "boolean" }
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
             forbidden: { type: "array", uniqueItems: true, items: { type: "string" } },
             order: { type: "array", items: { type: "string" } },
             precedence: {

@@ -43,6 +43,22 @@ export interface ArgumentReference {
   $argument: string;
 }
 
+/**
+ * A tool that is obligatory only in the worlds that warrant it. The condition
+ * reads the agent's own reported outcome, and the relationship is a
+ * biconditional: the tool must be called when the condition holds and must not
+ * be called when it does not. Stating it one-way would let an agent take a
+ * consequential action and simply not report it.
+ */
+export interface ConditionalRequirement {
+  tool: string;
+  when: {
+    outcomePath: string;
+    equals?: unknown;
+    nonEmpty?: boolean;
+  };
+}
+
 export interface FixtureCase {
   callIndex?: number;
   arguments?: Record<string, unknown>;
@@ -72,7 +88,7 @@ export interface Scenario {
   mcp?: McpConfiguration;
   expect: {
     tools?: {
-      required?: string[];
+      required?: Array<string | ConditionalRequirement>;
       forbidden?: string[];
       order?: string[];
       precedence?: Array<{

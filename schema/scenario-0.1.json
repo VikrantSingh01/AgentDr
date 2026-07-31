@@ -358,7 +358,42 @@
               "type": "array",
               "uniqueItems": true,
               "items": {
-                "type": "string"
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "tool",
+                      "when"
+                    ],
+                    "properties": {
+                      "tool": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "when": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "outcomePath"
+                        ],
+                        "properties": {
+                          "outcomePath": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "equals": {},
+                          "nonEmpty": {
+                            "type": "boolean"
+                          }
+                        }
+                      }
+                    }
+                  }
+                ]
               }
             },
             "forbidden": {

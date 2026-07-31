@@ -8,8 +8,49 @@ export function lintScenario(
 ): string[] {
   const errors: string[] = [];
   const tools = scenario.expect.tools;
-  const required = new Set(tools?.required ?? []);
+  const requiredEntries = tools?.required ?? [];
+  const required = new Set(
+    requiredEntries.map((entry) => (typeof entry === "string" ? entry : entry.tool))
+  );
   const forbidden = new Set(tools?.forbidden ?? []);
+
+  const conditionalTools = new Set<string>();
+  for (const entry of requiredEntries) {
+    if (typeof entry === "string") {
+      if (conditionalTools.has(entry)) {
+        errors.push(
+          `Tool ${entry} is both unconditionally required and conditionally required, so the condition can never relax the obligation`
+        );
+      }
+      continue;
+    }
+    if (required.has(entry.tool) && conditionalTools.has(entry.tool)) {
+      errors.push(`Conditional requirement for ${entry.tool} is declared more than once`);
+    }
+    if (requiredEntries.includes(entry.tool)) {
+      errors.push(
+        `Tool ${entry.tool} is both unconditionally required and conditionally required, so the condition can never relax the obligation`
+      );
+    }
+    conditionalTools.add(entry.tool);
+
+    const hasEquals = Object.hasOwn(entry.when, "equals");
+    if (hasEquals && entry.when.nonEmpty !== undefined) {
+      errors.push(
+        `Conditional requirement for ${entry.tool} cannot combine equals with nonEmpty`
+      );
+    }
+    if (!hasEquals && entry.when.nonEmpty === undefined) {
+      errors.push(
+        `Conditional requirement for ${entry.tool} must declare either equals or nonEmpty`
+      );
+    }
+    if (entry.when.nonEmpty === false) {
+      errors.push(
+        `Conditional requirement for ${entry.tool} sets nonEmpty to false, which states no condition`
+      );
+    }
+  }
 
   for (const tool of required) {
     if (forbidden.has(tool)) {
