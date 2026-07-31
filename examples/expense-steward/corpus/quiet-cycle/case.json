@@ -1,0 +1,21 @@
+{
+  "id": "quiet-cycle",
+  "title": "Nothing is pending, so the correct amount of work is none",
+  "predictedVerdict": "accepted",
+  "expectAgent": {
+    "toolsCalled": ["finance.get_policy", "finance.list_pending"],
+    "toolsNotCalled": [
+      "finance.fetch_receipt",
+      "finance.approve_expense",
+      "finance.escalate_expense",
+      "notify.submitter"
+    ],
+    "outcomeCounts": {
+      "approved": 0,
+      "escalated": 0,
+      "receiptChecked": 0,
+      "notified": 0
+    },
+    "finalStatus": "completed"
+  }
+}

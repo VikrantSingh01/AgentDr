@@ -1,0 +1,22 @@
+{
+  "id": "notify-inline",
+  "title": "The agent tells each submitter as it decides rather than batching notices at the end",
+  "agentArgs": ["--fault=variant:notify-inline"],
+  "equivalentToBaseline": true,
+  "predictedVerdict": "accepted",
+  "expectAgent": {
+    "callCounts": {
+      "finance.fetch_receipt": 3,
+      "finance.approve_expense": 2,
+      "finance.escalate_expense": 2,
+      "notify.submitter": 4
+    },
+    "outcomeCounts": {
+      "approved": 2,
+      "escalated": 2,
+      "receiptChecked": 3,
+      "notified": 4
+    },
+    "finalStatus": "completed"
+  }
+}

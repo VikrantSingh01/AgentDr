@@ -1,0 +1,23 @@
+{
+  "department": "Platform Engineering",
+  "expenses": [
+    {
+      "id": "EXP-1001",
+      "submitter": "alice@contoso.example",
+      "amount": 720,
+      "category": "hardware"
+    },
+    {
+      "id": "EXP-1002",
+      "submitter": "bob@contoso.example",
+      "amount": 500,
+      "category": "travel"
+    },
+    {
+      "id": "EXP-1003",
+      "submitter": "carol@contoso.example",
+      "amount": 1800,
+      "category": "hardware"
+    }
+  ]
+}

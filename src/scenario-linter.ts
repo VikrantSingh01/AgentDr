@@ -1,11 +1,55 @@
-import type { ResolvedFixtures, ResultReference, Scenario } from "./types.js";
+import type {
+  ObligationCondition,
+  ResolvedFixtures,
+  ResultReference,
+  Scenario
+} from "./types.js";
 import { isStructurallyEqual, isSubset } from "./value-match.js";
 import {
+  collectMatchTreeErrors,
   collectOutcomeReferenceNodes,
   collectReferenceNodes,
   validateOutcomeReference,
   validateReference
 } from "./result-reference.js";
+
+/**
+ * Recursive so a disjunction cannot smuggle in a branch that states no
+ * condition. A branch that always holds turns the whole condition into a
+ * tautology, which is the vacuous obligation this linter exists to prevent.
+ */
+function validateObligationCondition(
+  when: ObligationCondition,
+  subject: string,
+  errors: string[]
+): void {
+  if (when.$anyOf) {
+    if (when.outcomePath !== undefined) {
+      errors.push(`${subject} cannot combine $anyOf with outcomePath`);
+    }
+    if (when.$anyOf.length < 2) {
+      errors.push(`${subject} $anyOf must declare at least two alternatives`);
+    }
+    for (const branch of when.$anyOf) {
+      validateObligationCondition(branch, subject, errors);
+    }
+    return;
+  }
+  if (when.outcomePath === undefined) {
+    errors.push(`${subject} must declare an outcomePath`);
+    return;
+  }
+  const hasEquals = Object.hasOwn(when, "equals");
+  if (hasEquals && when.nonEmpty !== undefined) {
+    errors.push(`${subject} cannot combine equals with nonEmpty`);
+  }
+  if (!hasEquals && when.nonEmpty === undefined) {
+    errors.push(`${subject} must declare either equals or nonEmpty`);
+  }
+  if (when.nonEmpty === false) {
+    errors.push(`${subject} sets nonEmpty to false, which states no condition`);
+  }
+}
 
 export function lintScenario(
   scenario: Scenario,
@@ -39,22 +83,11 @@ export function lintScenario(
     }
     conditionalTools.add(entry.tool);
 
-    const hasEquals = Object.hasOwn(entry.when, "equals");
-    if (hasEquals && entry.when.nonEmpty !== undefined) {
-      errors.push(
-        `Conditional requirement for ${entry.tool} cannot combine equals with nonEmpty`
-      );
-    }
-    if (!hasEquals && entry.when.nonEmpty === undefined) {
-      errors.push(
-        `Conditional requirement for ${entry.tool} must declare either equals or nonEmpty`
-      );
-    }
-    if (entry.when.nonEmpty === false) {
-      errors.push(
-        `Conditional requirement for ${entry.tool} sets nonEmpty to false, which states no condition`
-      );
-    }
+    validateObligationCondition(
+      entry.when,
+      `Conditional requirement for ${entry.tool}`,
+      errors
+    );
   }
 
   for (const tool of required) {
@@ -143,7 +176,23 @@ export function lintScenario(
       );
       continue;
     }
-    const key = `${rule.before}\u0000${rule.after}`;
+    if (rule.correlate !== undefined) {
+      if (rule.scope !== undefined) {
+        errors.push(
+          `Precedence rule ${rule.before} before ${rule.after} cannot combine correlate with scope; a per-record rule already has exactly one first call per record`
+        );
+      }
+      const seenPaths = new Set<string>();
+      for (const path of rule.correlate) {
+        if (seenPaths.has(path)) {
+          errors.push(
+            `Precedence rule ${rule.before} before ${rule.after} lists correlate path ${path} more than once`
+          );
+        }
+        seenPaths.add(path);
+      }
+    }
+    const key = `${rule.before}\u0000${rule.after}\u0000${(rule.correlate ?? []).join(",")}`;
     if (precedencePairs.has(key)) {
       errors.push(
         `Precedence rule ${rule.before} before ${rule.after} is declared more than once`
@@ -151,7 +200,7 @@ export function lintScenario(
       continue;
     }
     precedencePairs.add(key);
-    if (precedencePairs.has(`${rule.after}\u0000${rule.before}`)) {
+    if (precedencePairs.has(`${rule.after}\u0000${rule.before}\u0000${(rule.correlate ?? []).join(",")}`)) {
       errors.push(
         `Precedence rules require ${rule.before} before ${rule.after} and ${rule.after} before ${rule.before}, which cannot both hold`
       );
@@ -246,6 +295,11 @@ export function lintScenario(
         );
       }
     }
+    for (const treeError of collectMatchTreeErrors(argumentExpectation.match)) {
+      errors.push(
+        `Argument expectation for ${argumentExpectation.tool} is invalid: ${treeError}`
+      );
+    }
     for (const node of collectReferenceNodes(argumentExpectation.match)) {
       const shapeErrors = validateReference(node);
       if (shapeErrors.length > 0) {
@@ -292,6 +346,9 @@ export function lintScenario(
   // as correlated arguments, so they get the same static checks. Without this a
   // contract can reference a tool it also forbids and only discover at run time
   // that the expectation could never have held.
+  for (const treeError of collectMatchTreeErrors(scenario.expect.outcome?.match)) {
+    errors.push(`Outcome expectation is invalid: ${treeError}`);
+  }
   for (const node of collectReferenceNodes(scenario.expect.outcome?.match)) {
     const shapeErrors = validateReference(node);
     for (const shapeError of shapeErrors) {

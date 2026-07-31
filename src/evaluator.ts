@@ -125,9 +125,25 @@ export function evaluateRun(
     when: ObligationCondition,
     subject: string
   ): { holds: boolean; described: string } | undefined => {
-    const target = final
-      ? readValueAtPath(final.output, when.outcomePath)
-      : { found: false, value: undefined };
+    // An obligation is often owed for either of two outcomes. A notice is due
+    // for every decision, whether the record was approved or escalated, and a
+    // condition naming only one of them forbids the notice in every world where
+    // the other happened alone. Splitting it into two entries does not help:
+    // each would independently forbid the call whenever its own branch was
+    // empty. So the disjunction has to live inside the condition.
+    if (when.$anyOf) {
+      const branches = when.$anyOf.map((branch) => evaluateCondition(branch, subject));
+      if (branches.some((branch) => branch === undefined)) return undefined;
+      const resolved = branches as Array<{ holds: boolean; described: string }>;
+      return {
+        holds: resolved.some((branch) => branch.holds),
+        described: resolved.map((branch) => branch.described).join(" or ")
+      };
+    }
+    const target =
+      final && when.outcomePath !== undefined
+        ? readValueAtPath(final.output, when.outcomePath)
+        : { found: false, value: undefined };
     if (!target.found) {
       findings.push(
         causedByReport({
@@ -285,6 +301,50 @@ export function evaluateRun(
   }
 
   for (const rule of expectations?.precedence ?? []) {
+    // A correlated rule is per record, not per tool. It says that evidence the
+    // agent gathered about one record must precede the action it took on that
+    // same record — an approval justified by a receipt fetched afterwards was
+    // not justified by it. The uncorrelated form cannot express this: it either
+    // demands a prerequisite for records that never needed one, or accepts a
+    // prerequisite gathered for some other record entirely.
+    //
+    // It is deliberately vacuous where the prerequisite is absent for a key.
+    // Whether a record needed evidence at all is a separate question, answered
+    // by the argument correlations; this rule only constrains ordering for the
+    // records where the agent itself decided evidence was warranted.
+    if (rule.correlate) {
+      const keyOf = (call: (typeof calls)[number]): string | undefined => {
+        const parts: string[] = [];
+        for (const path of rule.correlate!) {
+          const read = readValueAtPath(call.arguments, path);
+          if (!read.found) return undefined;
+          parts.push(JSON.stringify(read.value));
+        }
+        return parts.join("\u0000");
+      };
+      const earliestBefore = new Map<string, number>();
+      calls.forEach((call, index) => {
+        if (call.tool !== rule.before) return;
+        const key = keyOf(call);
+        if (key === undefined || earliestBefore.has(key)) return;
+        earliestBefore.set(key, index);
+      });
+      for (const [index, call] of calls.entries()) {
+        if (call.tool !== rule.after) continue;
+        const key = keyOf(call);
+        if (key === undefined) continue;
+        const before = earliestBefore.get(key);
+        if (before === undefined || before < index) continue;
+        findings.push({
+          id: "tool.precedence",
+          severity: "error",
+          message: `${rule.after} acted on ${rule.correlate.join(", ")} before the ${rule.before} call for the same record, so it could not have been informed by it`,
+          evidenceSequence: call.sequence
+        });
+      }
+      continue;
+    }
+
     const beforeIndexes: number[] = [];
     const afterIndexes: number[] = [];
     callNames.forEach((name, index) => {

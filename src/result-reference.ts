@@ -48,6 +48,20 @@ interface OutcomeReferenceNode {
   $fromOutcome: string;
 }
 
+interface AnyOfNode {
+  $anyOf: unknown[];
+}
+
+export function isAnyOfNode(value: unknown): value is AnyOfNode {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value) &&
+    Object.hasOwn(value, "$anyOf") &&
+    Array.isArray((value as AnyOfNode).$anyOf)
+  );
+}
+
 export function isOutcomeReferenceNode(value: unknown): value is OutcomeReferenceNode {
   return (
     typeof value === "object" &&
@@ -88,19 +102,69 @@ function describeCriteria(criteria: Record<string, unknown>): string {
     .join(", ");
 }
 
+// A selection policy is frequently a threshold: approve below a limit, escalate
+// at or above it. Equality cannot express that, and the only alternative is to
+// write the limit into the contract as a literal — which pins the contract to
+// the one policy the baseline world happened to return and rejects every correct
+// run under a different limit. The bound is resolved through the same machinery
+// as any other expected value, so it can come from the tool result that
+// published it.
+const COMPARISON_KEYS = ["$lessThan", "$atMost", "$greaterThan", "$atLeast"] as const;
+
+type ComparisonKey = (typeof COMPARISON_KEYS)[number];
+
+function comparisonKeyOf(value: unknown): ComparisonKey | undefined {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return undefined;
+  }
+  const keys = Object.keys(value);
+  if (keys.length !== 1) return undefined;
+  return (COMPARISON_KEYS as readonly string[]).includes(keys[0]!)
+    ? (keys[0] as ComparisonKey)
+    : undefined;
+}
+
+// Both sides must be numbers. Comparing a string to a number with JavaScript's
+// relational operators silently coerces and would report an ordering that does
+// not exist, so a non-numeric side is an unresolved reference rather than false
+// confidence.
+function compareNumbers(operator: ComparisonKey, subject: unknown, bound: unknown): boolean {
+  if (typeof subject !== "number" || typeof bound !== "number") return false;
+  if (!Number.isFinite(subject) || !Number.isFinite(bound)) return false;
+  switch (operator) {
+    case "$lessThan":
+      return subject < bound;
+    case "$atMost":
+      return subject <= bound;
+    case "$greaterThan":
+      return subject > bound;
+    case "$atLeast":
+      return subject >= bound;
+  }
+}
+
 function describeExpected(value: unknown): string {
   if (isArgumentReferenceNode(value)) return `$argument.${value.$argument}`;
   if (isResultReferenceNode(value)) return `(${describeReference(value.$fromResult)})`;
+  if (isAnyOfNode(value)) {
+    return `any of [${value.$anyOf.map((branch) => describeExpected(branch)).join(", ")}]`;
+  }
+  const comparison = comparisonKeyOf(value);
+  if (comparison) {
+    const bound = (value as Record<string, unknown>)[comparison];
+    return `${comparison} ${describeExpected(bound)}`;
+  }
   return JSON.stringify(value) ?? String(value);
 }
 
 export function describeReference(reference: ResultReference): string {
-  const selector =
-    reference.callIndex !== undefined
-      ? `[${reference.callIndex}]`
-      : reference.where
-        ? `[where ${describeCriteria(reference.where)}]`
-        : "";
+  const selectorParts: string[] = [];
+  if (reference.callIndex !== undefined) selectorParts.push(String(reference.callIndex));
+  if (reference.where) selectorParts.push(`where ${describeCriteria(reference.where)}`);
+  if (reference.whereResult) {
+    selectorParts.push(`whereResult ${describeCriteria(reference.whereResult)}`);
+  }
+  const selector = selectorParts.length > 0 ? `[${selectorParts.join(", ")}]` : "";
   let base = `${reference.tool}${selector}.${reference.path}`;
   if (reference.find) {
     base = `${base}[find ${describeCriteria(reference.find)}]`;
@@ -157,6 +221,37 @@ function validateCriteria(
     if (isResultReferenceNode(value)) {
       errors.push(...validateReference(value.$fromResult));
     }
+    const comparison = comparisonKeyOf(value);
+    if (comparison) {
+      const bound = (value as Record<string, unknown>)[comparison];
+      if (isResultReferenceNode(bound)) {
+        errors.push(...validateReference(bound.$fromResult));
+      } else if (!isArgumentReferenceNode(bound) && typeof bound !== "number") {
+        errors.push(
+          `$fromResult ${label} ${comparison} requires a number, a $argument, or a $fromResult bound`
+        );
+      }
+      continue;
+    }
+    // A comparison operator written with a sibling key, or misspelled, would
+    // otherwise be read as a literal object and match nothing at all. Silence
+    // there is the worst outcome: the selector looks strict and asserts nothing.
+    if (
+      typeof value === "object" &&
+      value !== null &&
+      !Array.isArray(value) &&
+      !isArgumentReferenceNode(value) &&
+      !isResultReferenceNode(value)
+    ) {
+      const stray = Object.keys(value).filter((candidate) =>
+        (COMPARISON_KEYS as readonly string[]).includes(candidate)
+      );
+      if (stray.length > 0) {
+        errors.push(
+          `$fromResult ${label} ${stray.join(", ")} must be the only property of its object`
+        );
+      }
+    }
   }
 }
 
@@ -180,6 +275,7 @@ export function validateReference(reference: unknown): string[] {
         "sequence",
         "offset",
         "where",
+        "whereResult",
         "find",
         "select",
         "length"
@@ -203,8 +299,16 @@ export function validateReference(reference: unknown): string[] {
         "$fromResult cannot combine callIndex with where; a correlation selects a call by key, not by position"
       );
     }
+    if (candidate.whereResult !== undefined) {
+      errors.push(
+        "$fromResult cannot combine callIndex with whereResult; a correlation selects a call by key, not by position"
+      );
+    }
   }
   if (candidate.where !== undefined) validateCriteria("where", candidate.where, errors);
+  if (candidate.whereResult !== undefined) {
+    validateCriteria("whereResult", candidate.whereResult, errors);
+  }
   if (candidate.find !== undefined) validateCriteria("find", candidate.find, errors);
   if (candidate.select !== undefined) {
     if (typeof candidate.select !== "string" || candidate.select.length === 0) {
@@ -276,6 +380,19 @@ function resolveExpectedValues(
   if (isResultReferenceNode(expected)) {
     return resolveCandidates(expected.$fromResult, context);
   }
+  // A union of candidate sets, not a weakening. Each branch still has to resolve
+  // against real evidence, and if every branch resolves to nothing the reference
+  // is unresolvable and the call is a finding. It exists because a value is
+  // often correlated to whichever of two mutually exclusive actions was taken —
+  // a submitter is told "approved" or "escalated", and which one is correct
+  // depends on what the agent actually did to that record. Without it the only
+  // expressible options are to correlate to one branch, which rejects every
+  // correct run that took the other, or to assert nothing.
+  if (isAnyOfNode(expected)) {
+    return (expected.$anyOf as unknown[]).flatMap((branch) =>
+      resolveExpectedValues(branch, context)
+    );
+  }
   return [expected];
 }
 
@@ -296,6 +413,14 @@ function criteriaMatch(
     }
     const read = readPath(subject, path);
     if (!read.found) return false;
+    const comparison = comparisonKeyOf(expected);
+    if (comparison) {
+      const bounds = resolveExpectedValues(
+        (expected as Record<string, unknown>)[comparison],
+        context
+      );
+      return bounds.some((bound) => compareNumbers(comparison, read.value, bound));
+    }
     const values = resolveExpectedValues(expected, context);
     return values.some((value) => isStructurallyEqual(value, read.value));
   });
@@ -350,6 +475,9 @@ export function resolveCandidates(
       const sourceArguments = argumentsForCallId(evidence, event.callId);
       if (sourceArguments === undefined) continue;
       if (!criteriaMatch(reference.where, sourceArguments, context)) continue;
+    }
+    if (reference.whereResult) {
+      if (!criteriaMatch(reference.whereResult, event.result, context)) continue;
     }
     const read = readPath(event.result, reference.path);
     if (!read.found) continue;
@@ -428,6 +556,21 @@ function walk(
     return isStructurallyEqual(read.value, actual);
   }
 
+  // Mutually exclusive correlations. A submitter is told "approved" or
+  // "escalated", and which is correct depends on what the agent actually did to
+  // that record. Correlating to one branch rejects every correct run that took
+  // the other; correlating to neither asserts nothing. Each branch still has to
+  // resolve against real evidence, so this is a union of candidates rather than
+  // a relaxation.
+  if (isAnyOfNode(expected)) {
+    const branchUnresolved: string[] = [];
+    const matched = expected.$anyOf.some((branch) =>
+      walk(branch, actual, context, branchUnresolved)
+    );
+    if (!matched) unresolved.push(...branchUnresolved);
+    return matched;
+  }
+
   if (expected === null || typeof expected !== "object") {
     return Object.is(expected, actual);
   }
@@ -476,4 +619,36 @@ export function collectReferenceNodes(expected: unknown): unknown[] {
     );
   }
   return [];
+}
+
+/**
+ * A malformed `$anyOf` in a match tree is read as an ordinary literal object,
+ * which matches nothing and reports nothing. That is the same silent-selector
+ * failure the stray-comparison-key check exists to prevent, so it is caught
+ * statically rather than at run time.
+ */
+export function collectMatchTreeErrors(expected: unknown, path = "match"): string[] {
+  if (expected === null || typeof expected !== "object") return [];
+  if (Array.isArray(expected)) {
+    return expected.flatMap((entry, index) =>
+      collectMatchTreeErrors(entry, `${path}[${index}]`)
+    );
+  }
+  if (isResultReferenceNode(expected) || isArgumentReferenceNode(expected)) return [];
+  const record = expected as Record<string, unknown>;
+  if (Object.hasOwn(record, "$anyOf")) {
+    const branches = record.$anyOf;
+    if (!Array.isArray(branches) || branches.length < 2) {
+      return [`${path} $anyOf must be an array of at least two alternatives`];
+    }
+    if (Object.keys(record).length > 1) {
+      return [`${path} $anyOf must be the only property of its object`];
+    }
+    return branches.flatMap((branch, index) =>
+      collectMatchTreeErrors(branch, `${path} $anyOf[${index}]`)
+    );
+  }
+  return Object.entries(record).flatMap(([key, value]) =>
+    collectMatchTreeErrors(value, `${path}.${key}`)
+  );
 }

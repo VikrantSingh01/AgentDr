@@ -3,6 +3,12 @@ dist/
 .agentdoctor/
 coverage/
 *.log
+
+# Generated measurement output. Regenerate with npm run expense:measure.
+# Not committed: these embed absolute local paths.
+examples/expense-steward/corpus-report.json
+examples/expense-steward/mutation-report.json
+
 InitiationPlan.md
 Audit.md
 docs/teams-slt-proposal.md

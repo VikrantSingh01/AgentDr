@@ -1,0 +1,22 @@
+{
+  "id": "receipts-first",
+  "title": "The agent gathers every receipt up front instead of one per expense",
+  "agentArgs": ["--fault=variant:receipts-first"],
+  "equivalentToBaseline": true,
+  "predictedVerdict": "accepted",
+  "expectAgent": {
+    "callCounts": {
+      "finance.fetch_receipt": 3,
+      "finance.approve_expense": 2,
+      "finance.escalate_expense": 2,
+      "notify.submitter": 4
+    },
+    "outcomeCounts": {
+      "approved": 2,
+      "escalated": 2,
+      "receiptChecked": 3,
+      "notified": 4
+    },
+    "finalStatus": "completed"
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "id": "all-below-thresholds",
+  "title": "Every claim is small enough to approve without a receipt",
+  "predictedVerdict": "accepted",
+  "expectAgent": {
+    "toolsCalled": ["finance.approve_expense", "notify.submitter"],
+    "toolsNotCalled": ["finance.fetch_receipt", "finance.escalate_expense"],
+    "callCounts": {
+      "finance.approve_expense": 3,
+      "notify.submitter": 3
+    },
+    "outcomeCounts": {
+      "approved": 3,
+      "escalated": 0,
+      "receiptChecked": 0,
+      "notified": 3
+    },
+    "finalStatus": "completed"
+  }
+}

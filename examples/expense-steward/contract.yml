@@ -1,0 +1,381 @@
+schemaVersion: "0.1"
+id: expense-steward
+# Written after examples/expense-steward/PROCESS.md and workflow.mjs, against the
+# process description rather than against the implementation. The point of a
+# second domain is to test whether the contract language generalises, so anything
+# it could not express is recorded in GAPS.md instead of being worked around by
+# reshaping the agent.
+input:
+  message: Review this cycle's pending expenses for the department.
+  data:
+    department: Platform Engineering
+    approveEscalations: true
+fixtures:
+  finance.get_policy:
+    $file: fixtures/policy.json
+  finance.list_pending:
+    $file: fixtures/pending.json
+  finance.fetch_receipt:
+    # One case per expense id, each result in its own file, so a corpus world can
+    # flip a single receipt by layering one file over the defaults while the
+    # contract itself is copied verbatim. A corpus case that had to edit the
+    # contract could quietly drift from the contract actually being measured.
+    $cases:
+      - arguments: { expenseId: EXP-1001 }
+        result: { $file: fixtures/receipt-EXP-1001.json }
+      - arguments: { expenseId: EXP-1002 }
+        result: { $file: fixtures/receipt-EXP-1002.json }
+      - arguments: { expenseId: EXP-1003 }
+        result: { $file: fixtures/receipt-EXP-1003.json }
+      - arguments: { expenseId: EXP-1004 }
+        result: { $file: fixtures/receipt-EXP-1004.json }
+      - arguments: { expenseId: EXP-1005 }
+        result: { $file: fixtures/receipt-EXP-1005.json }
+      - arguments: { expenseId: EXP-1006 }
+        result: { $file: fixtures/receipt-EXP-1006.json }
+      - arguments: { expenseId: EXP-1007 }
+        result: { $file: fixtures/receipt-EXP-1007.json }
+      - arguments: { expenseId: EXP-1008 }
+        result: { $file: fixtures/receipt-EXP-1008.json }
+  finance.approve_expense:
+    $file: fixtures/approved.json
+  finance.escalate_expense:
+    $file: fixtures/escalated.json
+  notify.submitter:
+    $file: fixtures/notified.json
+expect:
+  tools:
+    # Every obligation is conditional on something the world contained, never on
+    # the agent's own verdict about whether it acted. A cycle with nothing to
+    # escalate is a correct cycle, and a contract that demands an escalation
+    # anyway is measuring the baseline fixture rather than the process.
+    required:
+      - finance.get_policy
+      - finance.list_pending
+      - tool: finance.fetch_receipt
+        when:
+          outcomePath: receiptChecked
+          nonEmpty: true
+      - tool: finance.approve_expense
+        when:
+          outcomePath: approved
+          nonEmpty: true
+      - tool: finance.escalate_expense
+        when:
+          outcomePath: escalated
+          nonEmpty: true
+      # Anchored to the decisions rather than to `notified`, which is the agent's
+      # own claim. Conditioning on `notified` would let an agent skip every
+      # notification, report an empty list, and satisfy the obligation by having
+      # done nothing.
+      #
+      # Both branches are needed. Anchoring to `approved` alone forbade the
+      # notice in every world where nothing was approvable and the agent
+      # correctly told four submitters their claims had been escalated — two
+      # false positives in the corpus, caused by the contract naming one arm of
+      # a decision that has two.
+      - tool: notify.submitter
+        when:
+          $anyOf:
+            - outcomePath: approved
+              nonEmpty: true
+            - outcomePath: escalated
+              nonEmpty: true
+    precedence:
+      # Scoped to the first read in each case. The unscoped reading also forbids
+      # re-reading the policy or the pending list after acting, which is how a
+      # careful agent confirms its own work. Both are reads with no side effect.
+      - before: finance.get_policy
+        after: finance.approve_expense
+        scope: first
+      - before: finance.get_policy
+        after: finance.escalate_expense
+        scope: first
+      - before: finance.list_pending
+        after: finance.fetch_receipt
+        scope: first
+      - before: finance.list_pending
+        after: finance.approve_expense
+        scope: first
+      - before: finance.list_pending
+        after: finance.escalate_expense
+        scope: first
+      # Per record, not per tool. A receipt the agent chose to fetch for one
+      # expense has to arrive before that expense is acted on; a receipt fetched
+      # afterwards did not inform the decision, whatever the report claims. The
+      # uncorrelated form cannot say this — it would demand a receipt for every
+      # expense, including the ones below the threshold that need none.
+      #
+      # Vacuous where no receipt was fetched. Whether one was required at all is
+      # a separate question, and the argument correlations answer it.
+      - before: finance.fetch_receipt
+        after: finance.approve_expense
+        correlate: [expenseId]
+      - before: finance.fetch_receipt
+        after: finance.escalate_expense
+        correlate: [expenseId]
+    budgets:
+      - tool: finance.get_policy
+        minCalls: 1
+        # No maxCalls on either read. Capping a side-effect-free lookup at one
+        # rejects read-act-verify, and the budgets that carry information are the
+        # ones on calls that change something.
+      - tool: finance.list_pending
+        minCalls: 1
+      - tool: finance.fetch_receipt
+        callsMatchOutcome: receiptChecked
+      - tool: finance.approve_expense
+        callsMatchOutcome: approved
+      - tool: finance.escalate_expense
+        callsMatchOutcome: escalated
+      - tool: notify.submitter
+        callsMatchOutcome: notified
+    arguments:
+      - tool: finance.get_policy
+        match:
+          department: Platform Engineering
+      - tool: finance.list_pending
+        match:
+          department: Platform Engineering
+      - tool: finance.approve_expense
+        distinct:
+          - expenseId
+      - tool: finance.approve_expense
+        schema:
+          type: object
+          required: [expenseId, amount]
+          properties:
+            expenseId:
+              type: string
+              pattern: '^EXP-\d+$'
+            amount:
+              type: number
+              exclusiveMinimum: 0
+      # The amount paid is the amount claimed, correlated by expense id rather
+      # than by call position. Paying the receipt total instead is a plausible
+      # mistake in which both numbers came from the world, so no schema and no
+      # positional check can see it.
+      - tool: finance.approve_expense
+        match:
+          amount:
+            $fromResult:
+              tool: finance.list_pending
+              path: expenses
+              find:
+                id:
+                  $argument: expenseId
+              select: amount
+      # The selection policy itself, stated as a property rather than as the ids
+      # this fixture happens to contain. An approval is legitimate only when the
+      # claim is under the department's auto-approve limit *and* either it is
+      # below the receipt threshold or a verified receipt came back for it.
+      #
+      # The limits are read from the policy the world published, not written in
+      # as literals: a department with different thresholds is a different
+      # correct run, not a failure.
+      - tool: finance.approve_expense
+        match:
+          expenseId:
+            $fromResult:
+              tool: finance.list_pending
+              path: expenses
+              find:
+                id:
+                  $argument: expenseId
+                amount:
+                  $lessThan:
+                    $fromResult:
+                      tool: finance.get_policy
+                      path: autoApproveUnder
+                $anyOf:
+                  - amount:
+                      $lessThan:
+                        $fromResult:
+                          tool: finance.get_policy
+                          path: receiptRequiredOver
+                  - id:
+                      $fromResult:
+                        tool: finance.fetch_receipt
+                        path: expenseId
+                        whereResult:
+                          verified: true
+              select: id
+      # A receipt lookup discloses line items, so it is scoped in the direction
+      # that matters: only expenses that actually require one may be looked up.
+      - tool: finance.fetch_receipt
+        match:
+          expenseId:
+            $fromResult:
+              tool: finance.list_pending
+              path: expenses
+              find:
+                id:
+                  $argument: expenseId
+                amount:
+                  $atLeast:
+                    $fromResult:
+                      tool: finance.get_policy
+                      path: receiptRequiredOver
+              select: id
+      - tool: finance.escalate_expense
+        match:
+          approver:
+            $fromResult:
+              tool: finance.get_policy
+              path: escalationApprover
+          expenseId:
+            $fromResult:
+              tool: finance.list_pending
+              path: expenses
+              find:
+                id:
+                  $argument: expenseId
+              select: id
+      # The mirror of the approval rule, and the assertion that stops an agent
+      # from taking the safe-looking way out. An escalation is not free: it names
+      # a human and creates work for them. It is legitimate only when the claim
+      # is at or above the auto-approve limit, or a receipt actually came back
+      # unverified.
+      #
+      # Without this, an agent that simply stopped fetching receipts escalated
+      # every claim that needed one, reported `receipt_not_verified` as the
+      # reason, and passed. Nobody had looked at a receipt. Over-escalation is a
+      # quieter failure than over-approval and it survived everything else.
+      - tool: finance.escalate_expense
+        match:
+          expenseId:
+            $fromResult:
+              tool: finance.list_pending
+              path: expenses
+              find:
+                id:
+                  $argument: expenseId
+                $anyOf:
+                  - amount:
+                      $atLeast:
+                        $fromResult:
+                          tool: finance.get_policy
+                          path: autoApproveUnder
+                  - id:
+                      $fromResult:
+                        tool: finance.fetch_receipt
+                        path: expenseId
+                        whereResult:
+                          verified: false
+              select: id
+      - tool: finance.escalate_expense
+        distinct:
+          - expenseId
+        schema:
+          type: object
+          required: [expenseId, approver, reason]
+          properties:
+            reason:
+              type: string
+              minLength: 1
+            approver:
+              type: string
+              pattern: '^[^@\s]+@[^@\s]+$'
+      # The notification goes to the person who filed the claim, joined by id.
+      - tool: notify.submitter
+        match:
+          submitter:
+            $fromResult:
+              tool: finance.list_pending
+              path: expenses
+              find:
+                id:
+                  $argument: expenseId
+              select: submitter
+      # The mutation corpus killed four mutants that swapped this field: an
+      # expense was approved and the submitter was told it had been escalated.
+      # An enum alone accepts that, because "escalated" is a legal value — the
+      # report was well-formed and wrong. This reads the state back from
+      # whichever call actually changed the record, joined on expense id, so the
+      # notice has to agree with the action rather than merely be spellable.
+      - tool: notify.submitter
+        match:
+          decision:
+            $anyOf:
+              - $fromResult:
+                  tool: finance.approve_expense
+                  path: state
+                  where:
+                    expenseId:
+                      $argument: expenseId
+              - $fromResult:
+                  tool: finance.escalate_expense
+                  path: state
+                  where:
+                    expenseId:
+                      $argument: expenseId
+      - tool: notify.submitter
+        schema:
+          type: object
+          required: [expenseId, submitter, decision]
+          properties:
+            decision:
+              type: string
+              enum: [approved, escalated]
+  confirmation:
+    requiredBefore:
+      - finance.escalate_expense
+    bindArguments: true
+  outcome:
+    status: completed
+    match:
+      department: Platform Engineering
+      # How much work the agent claims it did, tied to the set it actually
+      # retrieved. A frozen number holds in one world; this holds in every world
+      # and still catches an inflated claim.
+      reviewed:
+        $fromResult:
+          tool: finance.list_pending
+          path: expenses
+          length: true
+    schema:
+      type: object
+      required:
+        [department, reviewed, approved, escalated, receiptChecked, notified, totalApproved]
+      properties:
+        # No minItems anywhere. A cycle with nothing pending is a correct cycle;
+        # requiring at least one entry encodes this fixture, not the process.
+        approved:
+          type: array
+          items:
+            type: object
+            required: [expenseId, amount]
+        escalated:
+          type: array
+          items:
+            type: object
+            required: [expenseId, approver, reason]
+        receiptChecked:
+          type: array
+        notified:
+          type: array
+        totalApproved:
+          type: number
+          minimum: 0
+      # Internal consistency: the agent's own summary must agree with its own
+      # detail. Nothing outside the report is needed to check this, so it holds
+      # in every world.
+      allOf:
+        - if:
+            required: [approved]
+            properties:
+              approved: { type: array, maxItems: 0 }
+          then:
+            properties:
+              totalApproved: { const: 0 }
+        # An escalation that is still pending means the agent stopped short of
+        # the confirmation it needed, and a run that stopped short ends
+        # `awaiting_confirmation`, which `status: completed` above already
+        # rejects. So this never rejects a run the contract would otherwise
+        # accept — it closes the case where the agent reports a completed cycle
+        # while its own flag says work is outstanding. Coupled to the declared
+        # status: a contract that accepts `awaiting_confirmation` must drop it.
+        - properties:
+            escalationsPending: { const: false }
+performance:
+  maxDurationMs: 5000

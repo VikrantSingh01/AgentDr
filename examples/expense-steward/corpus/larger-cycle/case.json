@@ -1,0 +1,20 @@
+{
+  "id": "larger-cycle",
+  "title": "Twice the volume with both outcomes interleaved, so nothing depends on the size of the batch",
+  "predictedVerdict": "accepted",
+  "expectAgent": {
+    "callCounts": {
+      "finance.fetch_receipt": 6,
+      "finance.approve_expense": 4,
+      "finance.escalate_expense": 4,
+      "notify.submitter": 8
+    },
+    "outcomeCounts": {
+      "approved": 4,
+      "escalated": 4,
+      "receiptChecked": 6,
+      "notified": 8
+    },
+    "finalStatus": "completed"
+  }
+}

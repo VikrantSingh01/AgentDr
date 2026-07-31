@@ -1,0 +1,6 @@
+{
+  "department": "Platform Engineering",
+  "autoApproveUnder": 1000,
+  "receiptRequiredOver": 800,
+  "escalationApprover": "finance-approver@contoso.example"
+}

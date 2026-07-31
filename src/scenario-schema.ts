@@ -45,11 +45,16 @@ export const scenarioSchema = {
     obligationCondition: {
       type: "object",
       additionalProperties: false,
-      required: ["outcomePath"],
+      anyOf: [{ required: ["outcomePath"] }, { required: ["$anyOf"] }],
       properties: {
         outcomePath: { type: "string", minLength: 1 },
         equals: {},
-        nonEmpty: { type: "boolean" }
+        nonEmpty: { type: "boolean" },
+        $anyOf: {
+          type: "array",
+          minItems: 2,
+          items: { $ref: "#/$defs/obligationCondition" }
+        }
       }
     },
     resultReference: {
@@ -68,6 +73,7 @@ export const scenarioSchema = {
             sequence: { type: "array", minItems: 1 },
             offset: { type: "integer" },
             where: { $ref: "#/$defs/correlationCriteria" },
+            whereResult: { $ref: "#/$defs/correlationCriteria" },
             find: { $ref: "#/$defs/correlationCriteria" },
             select: { type: "string", minLength: 1 },
             length: { type: "boolean" }
@@ -252,7 +258,12 @@ export const scenarioSchema = {
                 properties: {
                   before: { type: "string", minLength: 1 },
                   after: { type: "string", minLength: 1 },
-                  scope: { enum: ["all", "first"] }
+                  scope: { enum: ["all", "first"] },
+                  correlate: {
+                    type: "array",
+                    minItems: 1,
+                    items: { type: "string", minLength: 1 }
+                  }
                 }
               }
             },

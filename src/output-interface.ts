@@ -1,4 +1,4 @@
-import type { Scenario } from "./types.js";
+import type { ObligationCondition, Scenario } from "./types.js";
 
 export interface OutputInterface {
   schema?: Record<string, unknown>;
@@ -42,8 +42,16 @@ export function collectOutputInterface(scenario: Scenario): OutputInterface {
   const schema = scenario.expect.outcome?.schema as Record<string, unknown> | undefined;
   const paths = new Set<string>();
 
+  // The interface is what the contract reads out of the report, so a disjunction
+  // contributes every path any of its branches reads. Missing one would let a
+  // contract depend on a field the published interface never mentions.
+  const collectConditionPaths = (when: ObligationCondition): void => {
+    if (when.outcomePath !== undefined) paths.add(when.outcomePath);
+    for (const branch of when.$anyOf ?? []) collectConditionPaths(branch);
+  };
+
   for (const entry of scenario.expect.tools?.required ?? []) {
-    if (typeof entry !== "string") paths.add(entry.when.outcomePath);
+    if (typeof entry !== "string") collectConditionPaths(entry.when);
   }
   for (const budget of scenario.expect.tools?.budgets ?? []) {
     if (budget.callsMatchOutcome !== undefined) paths.add(budget.callsMatchOutcome);

@@ -81,8 +81,17 @@
     "obligationCondition": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "outcomePath"
+      "anyOf": [
+        {
+          "required": [
+            "outcomePath"
+          ]
+        },
+        {
+          "required": [
+            "$anyOf"
+          ]
+        }
       ],
       "properties": {
         "outcomePath": {
@@ -92,6 +101,13 @@
         "equals": {},
         "nonEmpty": {
           "type": "boolean"
+        },
+        "$anyOf": {
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "$ref": "#/$defs/obligationCondition"
+          }
         }
       }
     },
@@ -130,6 +146,9 @@
               "type": "integer"
             },
             "where": {
+              "$ref": "#/$defs/correlationCriteria"
+            },
+            "whereResult": {
               "$ref": "#/$defs/correlationCriteria"
             },
             "find": {
@@ -463,6 +482,14 @@
                       "all",
                       "first"
                     ]
+                  },
+                  "correlate": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    }
                   }
                 }
               }

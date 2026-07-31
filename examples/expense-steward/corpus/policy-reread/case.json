@@ -1,0 +1,22 @@
+{
+  "id": "policy-reread",
+  "title": "The agent re-reads the policy after acting to confirm its own work",
+  "agentArgs": ["--fault=variant:policy-reread"],
+  "predictedVerdict": "accepted",
+  "expectAgent": {
+    "callCounts": {
+      "finance.get_policy": 2,
+      "finance.fetch_receipt": 3,
+      "finance.approve_expense": 2,
+      "finance.escalate_expense": 2,
+      "notify.submitter": 4
+    },
+    "outcomeCounts": {
+      "approved": 2,
+      "escalated": 2,
+      "receiptChecked": 3,
+      "notified": 4
+    },
+    "finalStatus": "completed"
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "id": "higher-limits",
+  "title": "The same claims under a looser policy, so the thresholds cannot be baked into the contract",
+  "predictedVerdict": "accepted",
+  "expectAgent": {
+    "toolsCalled": ["finance.approve_expense", "notify.submitter"],
+    "toolsNotCalled": ["finance.fetch_receipt", "finance.escalate_expense"],
+    "callCounts": {
+      "finance.approve_expense": 4,
+      "notify.submitter": 4
+    },
+    "outcomeCounts": {
+      "approved": 4,
+      "escalated": 0,
+      "receiptChecked": 0,
+      "notified": 4
+    },
+    "finalStatus": "completed"
+  }
+}

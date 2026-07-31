@@ -35,6 +35,13 @@ export interface ResultReference {
   sequence?: unknown[];
   offset?: number;
   where?: Record<string, unknown>;
+  /**
+   * Selects which calls of the tool to read by what came back, where `where`
+   * selects them by what was asked. A result-side property is often the only
+   * thing that distinguishes two identical-looking calls — a receipt lookup
+   * takes an id and returns whether it verified.
+   */
+  whereResult?: Record<string, unknown>;
   find?: Record<string, unknown>;
   select?: string;
   /**
@@ -78,9 +85,15 @@ export interface ConditionalRequirement {
  * world the agent may legitimately encounter.
  */
 export interface ObligationCondition {
-  outcomePath: string;
+  outcomePath?: string;
   equals?: unknown;
   nonEmpty?: boolean;
+  /**
+   * Holds when any branch holds. Present because an obligation is often owed
+   * for either of two outcomes, and naming only one of them forbids the call in
+   * every world where the other happened alone.
+   */
+  $anyOf?: ObligationCondition[];
 }
 
 /**
@@ -136,6 +149,12 @@ export interface Scenario {
          * `before` again afterwards to verify what it just did.
          */
         scope?: "all" | "first";
+        /**
+         * Argument paths that identify the record both calls are about. When
+         * present the rule is evaluated per record rather than per tool, and is
+         * vacuous for records the `before` call never covered.
+         */
+        correlate?: string[];
       }>;
       maxCalls?: number;
       budgets?: Array<{

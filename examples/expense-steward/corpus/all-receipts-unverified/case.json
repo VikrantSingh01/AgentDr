@@ -1,0 +1,25 @@
+{
+  "id": "all-receipts-unverified",
+  "title": "Claims are inside the limit but no receipt checks out, so all escalate on evidence",
+  "predictedVerdict": "accepted",
+  "expectAgent": {
+    "toolsCalled": [
+      "finance.fetch_receipt",
+      "finance.escalate_expense",
+      "notify.submitter"
+    ],
+    "toolsNotCalled": ["finance.approve_expense"],
+    "callCounts": {
+      "finance.fetch_receipt": 3,
+      "finance.escalate_expense": 3,
+      "notify.submitter": 3
+    },
+    "outcomeCounts": {
+      "approved": 0,
+      "escalated": 3,
+      "receiptChecked": 3,
+      "notified": 3
+    },
+    "finalStatus": "completed"
+  }
+}
