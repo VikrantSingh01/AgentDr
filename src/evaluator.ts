@@ -101,6 +101,16 @@ export function evaluateRun(
   const expectations = scenario.expect.tools;
   const final = [...evidence].reverse().find((event) => event.type === "final");
 
+  for (const event of evidence) {
+    if (event.type !== "tool_result" || !event.fixtureMiss) continue;
+    findings.push({
+      id: "fixture.unmatched_call",
+      severity: "error",
+      message: `No fixture case matched ${event.tool}; the call was answered with an error so the rest of the run could still be evaluated`,
+      evidenceSequence: event.sequence
+    });
+  }
+
   for (const tool of expectations?.required ?? []) {
     if (!callNames.includes(tool)) {
       findings.push({

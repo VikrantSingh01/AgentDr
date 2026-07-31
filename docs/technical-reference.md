@@ -133,8 +133,21 @@ fixtures:
 Cases are tested top to bottom. `callIndex` is zero-based per tool and
 `arguments` uses deterministic subset matching. Both selectors may be combined.
 A result-only case is a catch-all and must be last. The loader also rejects
-duplicate selectors and broader earlier cases that would shadow later cases. No
-match is a runtime failure rather than a success-shaped fallback.
+duplicate selectors and broader earlier cases that would shadow later cases.
+
+An unmatched call is answered with a tool error rather than aborting the run,
+and reports `fixture.unmatched_call`. It is never a success-shaped fallback: the
+run still fails. Aborting instead would be worse than useless, because a real
+agent occasionally calls a tool with arguments no fixture anticipated, and
+stopping there switches the instrument off at exactly that point and hides every
+defect later in the trace. That is not hypothetical — replaying a recorded
+Copilot run against an unmodified contract originally produced a single runtime
+failure; once the miss became non-fatal the same trace surfaced a critical
+unconfirmed production ring advance and a skipped rollout ring that had been
+masked. In the reference suite the change also moved four mutants out of the
+"invalid" bucket, all of which are killed, taking the mutation score from 96.7
+to 97.1 percent with nothing excluded as invalid.
+
 Fixture replay runs the adapter live but replaces only responses to tool calls
 emitted through Agent Doctor's JSONL protocol. It is not recorded full-run
 playback, does not intercept arbitrary child-process side effects, and does not

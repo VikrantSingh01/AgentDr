@@ -141,6 +141,7 @@ export type EvidenceEvent =
       durationMs?: number;
       resultBytes?: number;
       isError?: boolean;
+      fixtureMiss?: boolean;
     })
   | (EvidenceBase & {
       type: "confirmation";

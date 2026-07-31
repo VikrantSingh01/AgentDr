@@ -395,11 +395,6 @@ export async function executeAgentProcess(
             (candidate.arguments === undefined ||
               isSubset(candidate.arguments, argumentsValue))
         );
-        if (!fixtureCase) {
-          throw new Error(
-            `No fixture case matched ${event.tool} call index ${callIndex} with arguments ${JSON.stringify(argumentsValue)}`
-          );
-        }
         record({
           type: "tool_lifecycle",
           callId: event.callId,
@@ -407,14 +402,33 @@ export async function executeAgentProcess(
           state: "dispatched",
           mode
         });
-        result = fixtureCase.result;
-        record({
-          type: "tool_result",
-          callId: event.callId,
-          tool: event.tool,
-          result,
-          source: "fixture"
-        });
+        if (!fixtureCase) {
+          // A real agent will occasionally call a tool with arguments the
+          // fixture set does not anticipate. Aborting the run here would turn
+          // the instrument off at exactly that moment and hide every defect
+          // later in the trace, so record the miss as a tool error and let the
+          // remaining expectations evaluate.
+          const message = `No fixture case matched ${event.tool} call index ${callIndex} with arguments ${JSON.stringify(argumentsValue)}`;
+          result = { error: "fixture_unmatched", message };
+          record({
+            type: "tool_result",
+            callId: event.callId,
+            tool: event.tool,
+            result,
+            source: "fixture",
+            isError: true,
+            fixtureMiss: true
+          });
+        } else {
+          result = fixtureCase.result;
+          record({
+            type: "tool_result",
+            callId: event.callId,
+            tool: event.tool,
+            result,
+            source: "fixture"
+          });
+        }
       }
       record({
         type: "tool_lifecycle",

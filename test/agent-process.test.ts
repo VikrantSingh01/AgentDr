@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { describe, expect, it } from "vitest";
+import { evaluateRun } from "../src/evaluator.js";
 import {
   executeAgentProcess,
   terminateChildProcess
@@ -140,21 +141,52 @@ describe("child agent protocol", () => {
         ).toEqual([{ page: 1 }, { page: 2 }]);
   });
 
-  it("fails when no argument-aware fixture case matches", async () => {
+  it("answers an unmatched fixture case with an error instead of aborting the run", async () => {
+        // A real agent will sometimes call a tool with arguments the fixture
+        // set does not anticipate. Aborting there would hide every defect
+        // later in the trace, so the miss is reported and the run continues.
         const source = `
+          const input = await import("node:readline").then(({ createInterface }) =>
+            createInterface({ input: process.stdin })
+          );
           console.log(JSON.stringify({
             type: "tool_call", callId: "1", tool: "lookup", arguments: { id: "B" }
           }));
-          setTimeout(() => {}, 1000);
+          input.on("line", (line) => {
+            const event = JSON.parse(line);
+            if (event.type === "tool_result" && event.callId === "1") {
+              console.log(JSON.stringify({
+                type: "tool_call", callId: "2", tool: "lookup", arguments: { id: "A" }
+              }));
+            } else if (event.type === "tool_result" && event.callId === "2") {
+              console.log(JSON.stringify({ type: "final", status: "completed" }));
+            }
+          });
         `;
 
-        await expect(
-          execute(source, {
-            lookup: {
-              cases: [{ arguments: { id: "A" }, result: { found: true } }]
-            }
-          })
-        ).rejects.toThrow("No fixture case matched lookup call index 0");
+        const execution = await execute(source, {
+          lookup: {
+            cases: [{ arguments: { id: "A" }, result: { found: true } }]
+          }
+        });
+
+        const results = execution.evidence.filter(
+          (event) => event.type === "tool_result"
+        );
+
+        expect(results).toHaveLength(2);
+        expect(results[0]).toMatchObject({ isError: true, fixtureMiss: true });
+        expect(results[0].result).toMatchObject({ error: "fixture_unmatched" });
+
+        // The call after the miss still ran and still resolved normally, so
+        // downstream expectations remain evaluable.
+        expect(results[1].result).toEqual({ found: true });
+        expect(results[1].fixtureMiss).toBeUndefined();
+
+        const decision = evaluateRun(scenario, execution.evidence, 1);
+        expect(decision.findings.map((finding) => finding.id)).toContain(
+          "fixture.unmatched_call"
+        );
   });
 
   it("enforces argument-bound confirmation before dispatch", async () => {
