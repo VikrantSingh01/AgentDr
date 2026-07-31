@@ -37,6 +37,13 @@ export interface ResultReference {
   where?: Record<string, unknown>;
   find?: Record<string, unknown>;
   select?: string;
+  /**
+   * Resolve to the number of elements at `path` rather than to the value there.
+   * Agents routinely report how much work they did, and without this the only
+   * way to check that number is to freeze it, which turns the contract into a
+   * snapshot test. Counting the retrieved set instead holds in every world.
+   */
+  length?: boolean;
 }
 
 export interface ArgumentReference {
@@ -62,11 +69,29 @@ export interface OutcomeReference {
 
 export interface ConditionalRequirement {
   tool: string;
-  when: {
-    outcomePath: string;
-    equals?: unknown;
-    nonEmpty?: boolean;
-  };
+  when: ObligationCondition;
+}
+
+/**
+ * A condition read from the agent's own reported outcome. Anchoring on the
+ * report rather than on the world is what lets one contract hold across every
+ * world the agent may legitimately encounter.
+ */
+export interface ObligationCondition {
+  outcomePath: string;
+  equals?: unknown;
+  nonEmpty?: boolean;
+}
+
+/**
+ * An assertion about the report that only applies in the worlds the condition
+ * selects. Without this, correlating a reported value to a tool result forces
+ * the correlation to hold everywhere, so every world where the action was
+ * legitimately not taken is rejected. That is a false positive, not a defect.
+ */
+export interface ConditionalOutcomeExpectation {
+  when: ObligationCondition;
+  match: unknown;
 }
 
 export interface FixtureCase {
@@ -134,6 +159,7 @@ export interface Scenario {
     outcome?: {
       status: string;
       match?: unknown;
+      when?: ConditionalOutcomeExpectation[];
       schema?: Record<string, unknown>;
     };
   };

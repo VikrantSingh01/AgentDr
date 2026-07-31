@@ -616,6 +616,63 @@ reported path is `tool.arguments_reference_unresolved`, never a pass. Scenario
 linting rejects `$fromOutcome` inside `outcome.match`, where it would compare the
 final output against itself and could never fail.
 
+## Reported counts
+
+Agents report how much work they did, and that number is a claim like any other.
+Freezing it turns the contract into a snapshot test; leaving it unconstrained lets
+an agent inflate or deflate its own workload and pass. `length: true` resolves a
+`$fromResult` to the size of the collection at `path` instead of its value, so the
+claim is tied to the set that was actually retrieved:
+
+```yaml
+expect:
+  outcome:
+    match:
+      reviewed:
+        $fromResult:
+          tool: ado.query_untriaged_bugs
+          path: bugs
+          length: true
+```
+
+A count is only meaningful over a collection. Pointing `length` at an object or a
+string leaves the reference unresolved rather than counting keys or characters,
+which would otherwise pass for the wrong reason. `length` cannot be combined with
+`sequence`, because a count has no position in a declared sequence.
+
+## Conditional outcome expectations
+
+Some facts about the report are only checkable in the worlds where the action
+happened. Correlating a reported pull request id to the call that produced it is
+correct when the agent advanced a ring, and meaningless when a policy freeze
+correctly stopped it. Placed in `outcome.match`, such a correlation resolves to
+nothing in every quiet world and rejects a run that was right.
+
+`expect.outcome.when` scopes an outcome expectation to the worlds a condition
+selects, using the same condition vocabulary as a conditional obligation:
+
+```yaml
+expect:
+  outcome:
+    status: completed
+    when:
+      - when:
+          outcomePath: ringAdvance.attempted
+          equals: true
+        match:
+          ringAdvance:
+            pullRequestId:
+              $fromResult:
+                tool: ecs.advance_rollout_ring
+                path: pullRequestId
+```
+
+The condition is read from the agent's own report, so it cannot be satisfied by
+staying silent: reporting `attempted: true` without the matching call is already
+`tool.forbidden_when`, and reporting it with a fabricated pull request id is
+`outcome.output_subset`. A condition whose path is missing reports
+`tool.condition_unresolved` rather than skipping the assertion it guards.
+
 ## Current boundaries
 
 - one JSONL child-agent adapter;

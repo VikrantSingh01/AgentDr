@@ -42,6 +42,16 @@ export const scenarioSchema = {
         }
       }
     },
+    obligationCondition: {
+      type: "object",
+      additionalProperties: false,
+      required: ["outcomePath"],
+      properties: {
+        outcomePath: { type: "string", minLength: 1 },
+        equals: {},
+        nonEmpty: { type: "boolean" }
+      }
+    },
     resultReference: {
       type: "object",
       additionalProperties: false,
@@ -59,7 +69,8 @@ export const scenarioSchema = {
             offset: { type: "integer" },
             where: { $ref: "#/$defs/correlationCriteria" },
             find: { $ref: "#/$defs/correlationCriteria" },
-            select: { type: "string", minLength: 1 }
+            select: { type: "string", minLength: 1 },
+            length: { type: "boolean" }
           },
           dependentRequired: { offset: ["sequence"] }
         }
@@ -223,16 +234,7 @@ export const scenarioSchema = {
                     required: ["tool", "when"],
                     properties: {
                       tool: { type: "string", minLength: 1 },
-                      when: {
-                        type: "object",
-                        additionalProperties: false,
-                        required: ["outcomePath"],
-                        properties: {
-                          outcomePath: { type: "string", minLength: 1 },
-                          equals: {},
-                          nonEmpty: { type: "boolean" }
-                        }
-                      }
+                      when: { $ref: "#/$defs/obligationCondition" }
                     }
                   }
                 ]
@@ -333,6 +335,19 @@ export const scenarioSchema = {
           properties: {
             status: { type: "string", minLength: 1 },
             match: {},
+            when: {
+              type: "array",
+              minItems: 1,
+              items: {
+                type: "object",
+                additionalProperties: false,
+                required: ["when", "match"],
+                properties: {
+                  when: { $ref: "#/$defs/obligationCondition" },
+                  match: {}
+                }
+              }
+            },
             schema: { type: "object" }
           }
         }

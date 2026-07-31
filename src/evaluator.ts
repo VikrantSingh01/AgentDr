@@ -3,6 +3,7 @@ import type {
   Decision,
   EvidenceEvent,
   Finding,
+  ObligationCondition,
   Scenario
 } from "./types.js";
 import { isStructurallyEqual, isSubset } from "./value-match.js";
@@ -116,6 +117,51 @@ export function evaluateRun(
   const causedByReport = <T extends Finding>(finding: T): T =>
     rootCause && finding.id !== rootCause ? { ...finding, causedBy: rootCause } : finding;
 
+  // One implementation of "does this condition hold", shared by conditional
+  // obligations and conditional outcome expectations. A condition that cannot be
+  // read is never treated as false: that would silently skip the assertion it
+  // guards, which is the vacuous pass this project forbids.
+  const evaluateCondition = (
+    when: ObligationCondition,
+    subject: string
+  ): { holds: boolean; described: string } | undefined => {
+    const target = final
+      ? readValueAtPath(final.output, when.outcomePath)
+      : { found: false, value: undefined };
+    if (!target.found) {
+      findings.push(
+        causedByReport({
+          id: "tool.condition_unresolved",
+          severity: "error",
+          message: `${subject} reads final output path ${when.outcomePath}, which was not reported`,
+          evidenceSequence: final?.sequence
+        })
+      );
+      return undefined;
+    }
+    if (when.nonEmpty === true) {
+      if (!Array.isArray(target.value)) {
+        findings.push(
+          causedByReport({
+            id: "tool.condition_unresolved",
+            severity: "error",
+            message: `${subject} expects final output path ${when.outcomePath} to be an array`,
+            evidenceSequence: final?.sequence
+          })
+        );
+        return undefined;
+      }
+      return {
+        holds: target.value.length > 0,
+        described: `${when.outcomePath} is non-empty`
+      };
+    }
+    return {
+      holds: isStructurallyEqual(when.equals, target.value),
+      described: `${when.outcomePath} is ${JSON.stringify(when.equals)}`
+    };
+  };
+
   for (const event of evidence) {
     if (event.type !== "tool_result" || !event.fixtureMiss) continue;
     findings.push({
@@ -139,42 +185,12 @@ export function evaluateRun(
     }
 
     const called = callNames.includes(entry.tool);
-    const target = final
-      ? readValueAtPath(final.output, entry.when.outcomePath)
-      : { found: false, value: undefined };
-
-    if (!target.found) {
-      findings.push(
-        causedByReport({
-          id: "tool.condition_unresolved",
-          severity: "error",
-          message: `Conditional requirement for ${entry.tool} reads final output path ${entry.when.outcomePath}, which was not reported`,
-          evidenceSequence: final?.sequence
-        })
-      );
-      continue;
-    }
-
-    let holds: boolean;
-    let described: string;
-    if (entry.when.nonEmpty === true) {
-      if (!Array.isArray(target.value)) {
-        findings.push(
-          causedByReport({
-            id: "tool.condition_unresolved",
-            severity: "error",
-            message: `Conditional requirement for ${entry.tool} expects final output path ${entry.when.outcomePath} to be an array`,
-            evidenceSequence: final?.sequence
-          })
-        );
-        continue;
-      }
-      holds = target.value.length > 0;
-      described = `${entry.when.outcomePath} is non-empty`;
-    } else {
-      holds = isStructurallyEqual(entry.when.equals, target.value);
-      described = `${entry.when.outcomePath} is ${JSON.stringify(entry.when.equals)}`;
-    }
+    const condition = evaluateCondition(
+      entry.when,
+      `Conditional requirement for ${entry.tool}`
+    );
+    if (condition === undefined) continue;
+    const { holds, described } = condition;
 
     if (holds && !called) {
       findings.push(
@@ -507,6 +523,37 @@ export function evaluateRun(
           id: "outcome.output_subset",
           severity: "error",
           message: "Final output did not contain the expected values",
+          evidenceSequence: final.sequence
+        })
+      );
+    }
+  }
+  for (const entry of scenario.expect.outcome?.when ?? []) {
+    if (!final) break;
+    const condition = evaluateCondition(entry.when, "Conditional outcome expectation");
+    if (condition === undefined) continue;
+    if (!condition.holds) continue;
+    const outcome = matchWithReferences(
+      entry.match,
+      final.output,
+      evidence,
+      final.sequence
+    );
+    if (outcome.unresolved.length > 0) {
+      findings.push(
+        causedByReport({
+          id: "outcome.reference_unresolved",
+          severity: "error",
+          message: `Final output expectation for ${condition.described} references a result that was not observed: ${outcome.unresolved.join(", ")}`,
+          evidenceSequence: final.sequence
+        })
+      );
+    } else if (!outcome.matched) {
+      findings.push(
+        causedByReport({
+          id: "outcome.output_subset",
+          severity: "error",
+          message: `Final output did not contain the expected values when ${condition.described}`,
           evidenceSequence: final.sequence
         })
       );

@@ -106,6 +106,7 @@ export function describeReference(reference: ResultReference): string {
     base = `${base}[find ${describeCriteria(reference.find)}]`;
     if (reference.select) base = `${base}.${reference.select}`;
   }
+  if (reference.length) base = `count of ${base}`;
   if (!reference.sequence) return base;
   return `${base} offset ${reference.offset ?? 1} in declared sequence`;
 }
@@ -180,7 +181,8 @@ export function validateReference(reference: unknown): string[] {
         "offset",
         "where",
         "find",
-        "select"
+        "select",
+        "length"
       ].includes(key)
     ) {
       errors.push(`$fromResult does not support the property ${key}`);
@@ -210,6 +212,16 @@ export function validateReference(reference: unknown): string[] {
     }
     if (candidate.find === undefined) {
       errors.push("$fromResult select requires find");
+    }
+  }
+  if (candidate.length !== undefined) {
+    if (typeof candidate.length !== "boolean") {
+      errors.push("$fromResult length must be a boolean");
+    }
+    if (candidate.sequence !== undefined) {
+      errors.push(
+        "$fromResult cannot combine length with sequence; a count has no position in a declared sequence"
+      );
     }
   }
   if (candidate.sequence !== undefined) {
@@ -301,6 +313,14 @@ function argumentsForCallId(
   return undefined;
 }
 
+// A count is only meaningful over a collection. Returning undefined for anything
+// else makes the reference unresolvable rather than silently counting object
+// keys or string characters, which would pass for the wrong reason.
+function countOf(value: unknown): number | undefined {
+  if (Array.isArray(value)) return value.length;
+  return undefined;
+}
+
 export function resolveCandidates(
   reference: ResultReference,
   contextOrEvidence: ResolutionContext | EvidenceEvent[],
@@ -349,7 +369,13 @@ export function resolveCandidates(
       }
     }
     if (!reference.sequence) {
-      candidates.push(value);
+      if (reference.length) {
+        const count = countOf(value);
+        if (count === undefined) continue;
+        candidates.push(count);
+      } else {
+        candidates.push(value);
+      }
       continue;
     }
     const index = reference.sequence.findIndex((entry) =>
