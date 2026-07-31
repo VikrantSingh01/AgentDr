@@ -390,7 +390,7 @@ def assert_architecture_layout(draw):
         ("adapter", (346, 400, 612, 554), "harness"),
         ("adapter-stdio", (368, 462, 590, 506), "adapter"),
         ("adapter-mcp", (368, 518, 590, 542), "adapter"),
-        ("recorder", (652, 394, 850, 548), "harness"),
+        ("recorder", (652, 394, 880, 548), "harness"),
         ("evaluator", (898, 342, 1268, 704), "harness"),
         ("verdict", (1332, 386, 1718, 548), None),
         ("policy", (346, 610, 612, 720), "harness"),
@@ -449,12 +449,12 @@ def assert_architecture_layout(draw):
         ("adapter-title", "Adapter / transport", BODY_BOLD, (479, 422), "adapter", "ma"),
         ("adapter-stdio-text", "stdio JSONL", SMALL_BOLD, (479, 473), "adapter-stdio", "ma"),
         ("adapter-mcp-text", "real MCP stdio server", SMALL_BOLD, (479, 521), "adapter-mcp", "ma"),
-        ("recorder-title", "Evidence recorder", BODY_BOLD, (751, 416), "recorder", "ma"),
+        ("recorder-title", "Evidence recorder", BODY_BOLD, (766, 416), "recorder", "ma"),
         (
             "recorder-subtitle",
             wrapped_for("recorder", "append-only • sequenced • redacted"),
             SMALL,
-            (751, 452),
+            (766, 452),
             "recorder",
             "ma",
         ),
@@ -517,7 +517,7 @@ def assert_architecture_layout(draw):
             "sidecar",
             "ma",
         ),
-        ("evidence-copy-label", "read-only evidence copy", SMALL, (620, 806), None, None),
+        ("evidence-copy-label", "read-only evidence copy", SMALL, (660, 792), None, None),
         (
             "observe-title",
             "OBSERVE VS ENFORCEMENT",
@@ -650,7 +650,7 @@ def render_architecture():
 
     node(
         draw,
-        (652, 394, 850, 548),
+        (652, 394, 880, 548),
         "Evidence recorder",
         "append-only • sequenced • redacted",
         GREEN_LIGHT,
@@ -755,7 +755,7 @@ def render_architecture():
         AMBER,
         3,
     )
-    write(draw, (620, 806), "read-only evidence copy", SMALL, AMBER)
+    write(draw, (660, 792), "read-only evidence copy", SMALL, AMBER)
     write(draw, (1099, 958), "No arrow to verdict: it does not set CI status.", SMALL_BOLD, RED, anchor="ma")
 
     strip = (54, 884, 850, 1020)
