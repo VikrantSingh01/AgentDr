@@ -335,7 +335,9 @@ masked. In the reference suite the change also moved four mutants out of the
 "invalid" bucket, all of which are killed, taking the mutation score from 96.7
 to 97.1 percent with nothing excluded as invalid. Those were the numbers at the
 time; the corpus has grown two operators since and the current score is 98.1
-percent.
+percent. A same-mutants, same-fixtures negative control that replaces only the
+`expect` block scores 3.8 percent (2 killed, 51 survivors / 53 scorable), so the
+current score is not explained by corpus construction alone.
 
 Fixture replay runs the adapter live but replaces only responses to tool calls
 emitted through Agent Doctor's JSONL protocol. It is not recorded full-run

@@ -19,7 +19,7 @@ The current release proves that one local contract can:
 - preserve partial evidence and return stable CI exit codes;
 - sanitize configured sensitive values before report persistence.
 
-AgentDr itself currently has 260 tests across 24 files. Those results prove
+AgentDr itself currently has 285 tests across 25 files. Those results prove
 implementation quality. They do not prove that external teams have a recurring
 problem, can onboard independently, will retain scenarios, or will pay.
 
@@ -29,9 +29,10 @@ cycle:
 
 | Metric | Start of cycle | End of cycle |
 |---|---:|---:|
-| Mutation score | 58.8% (20 killed / 34 scorable) | **98.1% (52 killed / 53 scorable, 1 survivor)** |
+| Mutation score | 58.8% (20 killed / 34 scorable) | **98.1%** (52 killed, 1 survivor / 53 scorable, 4 behaviour-preserving excluded of 57 generated) |
+| Negative control | — | **3.8%** (2 killed, 51 survivors / 53 scorable) |
 | Survivors | 14 | **1** |
-| False positives | 7 of 8 worlds (87.5%) | **0 of 11 worlds (0.0%)** |
+| False positives | 7 of 8 worlds (87.5%) | **0 of 11** correct-behaviour worlds (0.0%) |
 | Over-blocked behaviour-preserving mutants | not measured | **0** (`reorder:5` passes at exit 0) |
 
 The absolute false-positive count matters more than the rate alone. Across the
@@ -41,14 +42,22 @@ positives. The instrument is sharp at catching real defects and now tolerates
 the measured correct-behaviour worlds. That is not a general PMF claim; it is
 one contract, one agent, and one task.
 
+The negative control keeps every fixture and mutant but swaps only the `expect`
+block for a near-empty contract: two required tools, no forbidden tools, and
+completed status. Its 3.8% score rules out the 98.1% result being a property of
+corpus construction alone.
+
 A second reference domain, `examples/expense-steward`, now measures the same pair
 on a deliberately different task topology: a batch fanned out over records, each
 branching between two mutually exclusive actions, with an aggregate reported at
-the end. It scores **98.3% mutation (59 killed, 1 survivor, 0 invalid, 9
-behaviour-preserving excluded, 0 over-blocked)** with **0 of 11 correct-behaviour
-worlds rejected (0.0%)**. Both domains are measured by the same extracted
-operators, and the extraction is only credible because `em-triage-steward` still
-measures exactly 98.1% with the same survivor after moving onto them.
+the end. It scores **98.3% mutation** (59 killed, 1 survivor, 0 invalid, 9
+behaviour-preserving excluded of 69 generated, 60 scorable), has **0**
+over-blocked behaviour-preserving mutants, and rejects **0 of 11
+correct-behaviour worlds (0.0%)**. Its negative control scores **3.3%** (2
+killed, 58 survivors / 60 scorable). Both domains are measured by the same
+extracted operators, and the extraction is only credible because
+`em-triage-steward` still measures exactly 98.1% with the same survivor after
+moving onto them.
 
 What that buys is specific. It prices the risk that the contract language was
 shaped around one workload and would not express another, which nothing had
@@ -348,11 +357,12 @@ The next design-partner conversations should determine:
    developer experience, security, or compliance?
 6. Will teams accept a local JSON report, or do they require JUnit, SARIF, HTML,
    or hosted trend reporting?
-7. Do the 98.1% mutation score and 0 false-positive result reproduce across
-   other agents, contracts, and tasks? A second domain inside this repository,
-   `examples/expense-steward`, now measures 98.3% with 0 of 11 false positives on
-   a different task topology, which prices language overfitting but not
-   independence; the open part of this question is a third-party agent.
+7. Do the 98.1% mutation score, 3.8% negative control, and 0 false-positive
+   result reproduce across other agents, contracts, and tasks? A second domain
+   inside this repository, `examples/expense-steward`, now measures 98.3% with a
+   3.3% negative control and 0 of 11 false positives on a different task
+   topology, which prices language overfitting but not independence; the open
+   part of this question is a third-party agent.
 
 ## Decision
 

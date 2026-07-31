@@ -423,8 +423,9 @@ published together, for two agents built on two different task shapes.
 | | `em-triage-steward` | `examples/expense-steward` |
 | --- | --- | --- |
 | Task shape | one bug queue, triaged and routed, then a rollout ring advanced under policy | a batch of expenses fanned out, each branching between two exclusive actions, then an aggregate reported |
-| Mutation score | **98.1%** (52 killed, 1 survivor, 53 scorable, 4 behaviour-preserving excluded of 57 generated) | **98.3%** (59 killed, 1 survivor, 0 invalid, 9 behaviour-preserving excluded, 0 over-blocked) |
-| False positives | **0.0%** (0 of 11 correct-behaviour worlds) | **0.0%** (0 of 11 correct-behaviour worlds) |
+| Mutation score | **98.1%** (52 killed, 1 survivor / 53 scorable, 4 behaviour-preserving excluded of 57 generated) | **98.3%** (59 killed, 1 survivor, 0 invalid, 9 behaviour-preserving excluded of 69 generated, 60 scorable) |
+| Negative control | **3.8%** (2 killed, 51 survivors / 53 scorable) | **3.3%** (2 killed, 58 survivors / 60 scorable) |
+| False positives | **0 of 11** correct-behaviour worlds (0.0%) | **0 of 11** correct-behaviour worlds (0.0%) |
 | The one survivor | `swap-arg:7:summary`, free-text prose | `misreport-outcome:totalApproved`, a numeric sum over a reported collection |
 
 The mutation score is the share of deliberately broken agent runs the contract
@@ -434,6 +435,12 @@ work. Both survivors are recorded rather than excluded, in
 [`examples/expense-steward/GAPS.md`](examples/expense-steward/GAPS.md), because a
 survivor that is written down is a boundary and a survivor that is quietly
 dropped from the denominator is a nicer number about nothing.
+
+The negative control points the identical mutants and fixtures at a near-empty
+contract: two required tools, no forbidden tools, and `status: completed`; only
+the `expect` block changes, and both controls pass their baseline. Its low score
+rules out a high mutation number caused by corpus construction rather than by
+the real contract.
 
 Building the second domain forced five constructs into the contract language,
 none of them imagined in advance: each one closed a specific mutant or a specific
@@ -447,8 +454,14 @@ generalises past the shape of the first task. It is not independent third-party
 validation, because it was written by the same author inside this repository.
 
 ```bash
-npm run expense:measure          # both numbers for the second domain
+npm run expense:mutate           # real contract for the second domain
+npm run expense:control          # negative control for the second domain
+npm run expense:corpus           # correct-behaviour worlds for the second domain
+npm run expense:measure          # the real contract and the corpus together
 ```
+
+The two runs write reports named after their contracts, so the control cannot
+overwrite the published real-contract report.
 
 ## Current boundaries
 

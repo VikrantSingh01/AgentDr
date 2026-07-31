@@ -46,15 +46,20 @@ quantitative baseline and it must be read as a paired scorecard:
 
 | Metric | Start of cycle | End of cycle |
 |---|---:|---:|
-| Mutation score | 58.8% (20 killed / 34 scorable) | **98.1% (52 killed, 1 survivor / 53 scorable)** |
+| Mutation score | 58.8% (20 killed / 34 scorable) | **98.1%** (52 killed, 1 survivor / 53 scorable, 4 behaviour-preserving excluded of 57 generated) |
+| Negative control | — | **3.8%** (2 killed, 51 survivors / 53 scorable) |
 | Survivors | 14 | **1** (`swap-arg:7:summary`) |
-| False positives | 7 of 8 worlds (87.5%) | **0 of 11 worlds (0.0%)** |
+| False positives | 7 of 8 worlds (87.5%) | **0 of 11** correct-behaviour worlds (0.0%) |
 | Over-blocked behaviour-preserving mutants | not measured | **0** |
 
 Both mutation score and false positives must always be published together. The
 current paired result is 98.1% mutation score with 0 false positives across 11
 correct-behaviour worlds. The instrument is now sharp at catching real defects
 and precise enough to tolerate the legitimate variation in this workload.
+
+The negative control keeps the same mutants and fixtures but swaps in a
+near-empty `expect` block; it scores 3.8% while still passing the baseline. That
+keeps the 98.1% result from being explained by corpus construction alone.
 
 The false-positive path matters. Earlier in the cycle the absolute
 false-positive count went 7 -> 9 -> 8 as recall improved before precision caught
@@ -102,11 +107,17 @@ rather than the code that happens to implement it.
 
 | Metric | `em-triage-steward` | `examples/expense-steward` |
 |---|---:|---:|
-| Mutation score | **98.1%** (52 killed, 1 survivor / 53 scorable) | **98.3%** (59 killed, 1 survivor, 0 invalid) |
-| Behaviour-preserving excluded | 4 of 57 generated | 9 |
+| Mutation score | **98.1%** (52 killed, 1 survivor / 53 scorable, 4 behaviour-preserving excluded of 57 generated) | **98.3%** (59 killed, 1 survivor, 0 invalid, 9 behaviour-preserving excluded of 69 generated, 60 scorable) |
+| Negative control | **3.8%** (2 killed, 51 survivors / 53 scorable) | **3.3%** (2 killed, 58 survivors / 60 scorable) |
+| Behaviour-preserving excluded | 4 of 57 generated | 9 of 69 generated |
 | Over-blocked behaviour-preserving mutants | **0** | **0** |
-| False positives | **0 of 11 worlds (0.0%)** | **0 of 11 worlds (0.0%)** |
+| False positives | **0 of 11** correct-behaviour worlds (0.0%) | **0 of 11** correct-behaviour worlds (0.0%) |
 | Survivor | `swap-arg:7:summary`, free-text prose | `misreport-outcome:totalApproved`, a numeric sum |
+
+The control uses the same fixture worlds and mutant set, but replaces the real
+expectations with a near-empty contract requiring only two tools and completed
+status. With only 2 kills in each domain, the gap is the contract doing work,
+not the corpus reporting its own construction.
 
 Five constructs had to be added before the second contract could be written at
 all, and every one of them was forced by a specific measurement rather than
@@ -352,10 +363,11 @@ certification.
 ### 8. Add optional grounded local SLM adjudication
 
 The final deterministic contract reached 98.1% mutation score (52 killed, 1
-survivor / 53 scorable). The corpus ended at 0 of 11 false positives (0.0%) and
+survivor / 53 scorable). Its negative control scored 3.8% (2 killed, 51
+survivors / 53 scorable). The corpus ended at 0 of 11 false positives (0.0%) and
 0 over-blocked behaviour-preserving mutants. The seeded-fault suite catches 10 of
-10 faults and keeps 2 correct-behaviour baselines; AgentDr itself has 260 tests
-across 24 files.
+10 faults and keeps 2 correct-behaviour baselines; AgentDr itself has 285 tests
+across 25 files.
 
 The relational join over evidence has shipped: an argument can be asserted
 against the lookup result for the same record by shared key rather than by call
