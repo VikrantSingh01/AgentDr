@@ -192,8 +192,14 @@ describe("validateReference", () => {
   });
 
   it("rejects unknown properties", () => {
+    expect(validateReference({ tool: "a", path: "b", bogus: 1 })).toContain(
+      "$fromResult does not support the property bogus"
+    );
+  });
+
+  it("rejects a where clause that is not an object", () => {
     expect(validateReference({ tool: "a", path: "b", where: 1 })).toContain(
-      "$fromResult does not support the property where"
+      "$fromResult where must be an object"
     );
   });
 

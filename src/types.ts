@@ -34,6 +34,13 @@ export interface ResultReference {
   callIndex?: number;
   sequence?: unknown[];
   offset?: number;
+  where?: Record<string, unknown>;
+  find?: Record<string, unknown>;
+  select?: string;
+}
+
+export interface ArgumentReference {
+  $argument: string;
 }
 
 export interface FixtureCase {

@@ -329,6 +329,60 @@ reference to one zero-based call of the referenced tool, which is what makes
 "the owner assigned on the second update came from the second lookup"
 expressible. See [Scoped expectations](#scoped-expectations).
 
+## Correlated arguments
+
+`callIndex` buys precision at a price: it encodes an ordering the domain may not
+require. Pinning the second update to the second lookup rejects a run that
+performs the same two updates in the opposite order, even though nothing in the
+domain fixes that order. `where` and `find` select the producing call by
+**shared key** instead of by position:
+
+```yaml
+expect:
+  tools:
+    arguments:
+      - tool: ado.update_work_item
+        match:
+          assignedTo:
+            $fromResult:
+              tool: ado.get_area_owner
+              path: owner
+              where:
+                areaPath:
+                  $fromResult:
+                    tool: ado.query_untriaged_bugs
+                    path: bugs
+                    find:
+                      id:
+                        $argument: id
+                    select: areaPath
+```
+
+Read aloud: *the assignee on this update must be the owner returned by the
+area-owner lookup for the area of the bug this update is about.*
+
+- `where` constrains the **arguments** of the producing call. Only results whose
+  originating call matches every key are considered.
+- `find` selects one element from an array result, and `select` reads a path from
+  that element. `select` requires `find`.
+- `$argument` reads a value from the **call under test**, which is what closes
+  the loop between consumer and producer.
+- Criteria values may be literals, `$argument` nodes, or nested `$fromResult`
+  references, so a correlation can join across more than one hop.
+
+`callIndex` and `where` cannot be combined: a correlation selects a call by key,
+and mixing the two would silently reintroduce the positional constraint the
+correlation exists to remove. The linter rejects it.
+
+A correlation that resolves to nothing reports
+`tool.arguments_reference_unresolved`. It never passes vacuously, so a join key
+that is absent from the producing result is a finding, not a silent skip.
+
+One correlated expectation replaced three `callIndex` pins in the reference
+contract. Measured effect: the mutation score held at 96.7% with no kill lost,
+the false-positive count fell from 8 to 7, and the last remaining over-blocked
+equivalent mutant cleared to zero.
+
 With `sequence`, the expected value is the element `offset` positions after the
 observed value inside the declared domain. This expresses ordering over argument
 values, which `expect.tools.order` does not: `order` constrains tool names only.

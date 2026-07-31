@@ -10,6 +10,26 @@ export const scenarioSchema = {
         $file: { type: "string", minLength: 1 }
       }
     },
+    argumentReference: {
+      type: "object",
+      additionalProperties: false,
+      required: ["$argument"],
+      properties: {
+        $argument: { type: "string", minLength: 1 }
+      }
+    },
+    correlationCriteria: {
+      type: "object",
+      minProperties: 1,
+      additionalProperties: {
+        if: { type: "object", required: ["$fromResult"] },
+        then: { $ref: "#/$defs/resultReference" },
+        else: {
+          if: { type: "object", required: ["$argument"] },
+          then: { $ref: "#/$defs/argumentReference" }
+        }
+      }
+    },
     resultReference: {
       type: "object",
       additionalProperties: false,
@@ -24,7 +44,10 @@ export const scenarioSchema = {
             path: { type: "string", minLength: 1 },
             callIndex: { type: "integer", minimum: 0 },
             sequence: { type: "array", minItems: 1 },
-            offset: { type: "integer" }
+            offset: { type: "integer" },
+            where: { $ref: "#/$defs/correlationCriteria" },
+            find: { $ref: "#/$defs/correlationCriteria" },
+            select: { type: "string", minLength: 1 }
           },
           dependentRequired: { offset: ["sequence"] }
         }
@@ -229,7 +252,11 @@ export const scenarioSchema = {
                         type: "object",
                         required: ["$fromResult"]
                       },
-                      then: { $ref: "#/$defs/resultReference" }
+                      then: { $ref: "#/$defs/resultReference" },
+                      else: {
+                        if: { type: "object", required: ["$argument"] },
+                        then: { $ref: "#/$defs/argumentReference" }
+                      }
                     }
                   },
                   schema: { type: "object" },

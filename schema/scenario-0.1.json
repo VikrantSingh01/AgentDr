@@ -15,6 +15,45 @@
         }
       }
     },
+    "argumentReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "$argument"
+      ],
+      "properties": {
+        "$argument": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "correlationCriteria": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "if": {
+          "type": "object",
+          "required": [
+            "$fromResult"
+          ]
+        },
+        "then": {
+          "$ref": "#/$defs/resultReference"
+        },
+        "else": {
+          "if": {
+            "type": "object",
+            "required": [
+              "$argument"
+            ]
+          },
+          "then": {
+            "$ref": "#/$defs/argumentReference"
+          }
+        }
+      }
+    },
     "resultReference": {
       "type": "object",
       "additionalProperties": false,
@@ -48,6 +87,16 @@
             },
             "offset": {
               "type": "integer"
+            },
+            "where": {
+              "$ref": "#/$defs/correlationCriteria"
+            },
+            "find": {
+              "$ref": "#/$defs/correlationCriteria"
+            },
+            "select": {
+              "type": "string",
+              "minLength": 1
             }
           },
           "dependentRequired": {
@@ -425,6 +474,17 @@
                       },
                       "then": {
                         "$ref": "#/$defs/resultReference"
+                      },
+                      "else": {
+                        "if": {
+                          "type": "object",
+                          "required": [
+                            "$argument"
+                          ]
+                        },
+                        "then": {
+                          "$ref": "#/$defs/argumentReference"
+                        }
                       }
                     }
                   },
