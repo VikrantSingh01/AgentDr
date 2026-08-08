@@ -6,8 +6,12 @@ import {
   normalizeMcpTool
 } from "./mcp-conformance.js";
 import { createRedactor } from "./redaction.js";
-import type { ToolBackend, ToolBackendCallResult } from "./tool-backend.js";
-import type { EvidenceEventInput, McpConfiguration, McpToolSnapshot } from "./types.js";
+import type {
+  ToolBackend,
+  ToolBackendCallResult,
+  ToolBackendStartupEvent
+} from "./tool-backend.js";
+import type { McpConfiguration, McpToolSnapshot } from "./types.js";
 import { VERSION } from "./version.js";
 
 export function decodeMcpToolResult(result: {
@@ -66,6 +70,7 @@ export function decodeMcpToolResult(result: {
 }
 
 export class McpStdioProxy implements ToolBackend {
+  readonly redaction;
   private readonly client = new Client({ name: "agentdoctor", version: VERSION });
   private readonly transport: StdioClientTransport;
   private readonly redactValue: (value: unknown) => unknown;
@@ -77,6 +82,7 @@ export class McpStdioProxy implements ToolBackend {
     private readonly configuration: McpConfiguration,
     cwd: string
   ) {
+    this.redaction = configuration.redaction;
     const [command, ...args] = configuration.server.command;
     this.transport = new StdioClientTransport({
       command,
@@ -90,7 +96,7 @@ export class McpStdioProxy implements ToolBackend {
     this.redactValue = createRedactor(configuration.redaction);
   }
 
-  async start(runTimeoutMs: number): Promise<EvidenceEventInput[]> {
+  async start(runTimeoutMs: number): Promise<ToolBackendStartupEvent[]> {
     const startedAt = Date.now();
     const startupTimeoutMs = Math.min(
       this.configuration.startupTimeoutMs ?? 5000,
@@ -181,10 +187,6 @@ export class McpStdioProxy implements ToolBackend {
     }
   }
 
-  redact(value: unknown): unknown {
-    return this.redactValue(value);
-  }
-
   async close(): Promise<void> {
     if (!this.started || this.closed) return;
     this.closed = true;
@@ -203,7 +205,7 @@ export class McpStdioProxy implements ToolBackend {
     const message = error instanceof Error ? error.message : String(error);
     const stderr = this.serverStderr.trim();
     return String(
-      this.redact(stderr ? `${message}; MCP server stderr: ${stderr}` : message)
+      this.redactValue(stderr ? `${message}; MCP server stderr: ${stderr}` : message)
     );
   }
 }

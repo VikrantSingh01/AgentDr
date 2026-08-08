@@ -1,8 +1,8 @@
 import type { McpToolSnapshot, RunReport } from "./types.js";
 
 export interface RedactionOptions {
-  keys: string[];
-  replacement?: string;
+  readonly keys: readonly string[];
+  readonly replacement?: string;
 }
 
 export function createRedactor(options?: RedactionOptions): (value: unknown) => unknown {
@@ -225,6 +225,7 @@ export const RESERVED_REDACTION_KEYS = new Set([
   "exitCode",
   "findings",
   "evidenceSequence",
+  "causedBy",
   "evidence",
   "graph",
   "decision",
@@ -236,6 +237,7 @@ export const RESERVED_REDACTION_KEYS = new Set([
   "name",
   "node",
   "startedAt",
+  "fixtureMiss",
   "serverCommand",
   "serverInfo",
   "tools",
@@ -311,3 +313,26 @@ export const RESERVED_REDACTION_KEYS = new Set([
   "uniqueItems",
   "writeOnly"
 ]);
+
+export function assertSafeReportRedaction(options?: RedactionOptions): void {
+  for (const key of options?.keys ?? []) {
+    if (RESERVED_REDACTION_KEYS.has(key)) {
+      throw new Error(
+        `Invalid redaction key ${key}: structural report fields cannot be redacted`
+      );
+    }
+  }
+}
+
+export function snapshotSafeReportRedaction(
+  options?: RedactionOptions
+): RedactionOptions | undefined {
+  assertSafeReportRedaction(options);
+  if (!options) return undefined;
+  return Object.freeze({
+    keys: Object.freeze([...options.keys]),
+    ...(options.replacement !== undefined
+      ? { replacement: options.replacement }
+      : {})
+  });
+}

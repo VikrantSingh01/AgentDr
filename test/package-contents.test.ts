@@ -82,4 +82,25 @@ describe('published package contents', () => {
       );
     }
   }, 120_000);
+
+  it('publishes the package-root programmatic API', async () => {
+    const packed = new Set(packedFiles());
+    for (const file of [
+      'dist/src/index.js',
+      'dist/src/index.d.ts',
+      'dist/src/graph.js',
+      'dist/src/graph.d.ts',
+      'dist/src/tool-backend.d.ts',
+      'dist/src/types.d.ts',
+    ]) {
+      expect(packed.has(file), `${file} is part of the public API but would not ship`).toBe(true);
+    }
+
+    const sdk = await import('agentdoctor');
+    expect(sdk.runAgentDoctor).toBeTypeOf('function');
+    expect(sdk.createRedactor).toBeTypeOf('function');
+
+    const schemaUrl = import.meta.resolve('agentdoctor/schema/scenario-0.1.json');
+    expect(schemaUrl).toContain('schema/scenario-0.1.json');
+  }, 120_000);
 });

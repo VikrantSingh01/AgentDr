@@ -1,6 +1,10 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { createInterface } from "node:readline";
-import type { ToolBackend } from "./tool-backend.js";
+import { createRedactor } from "./redaction.js";
+import type {
+  ToolBackend,
+  ToolBackendStartupEvent
+} from "./tool-backend.js";
 import type {
   EvidenceEvent,
   EvidenceEventInput,
@@ -187,6 +191,49 @@ function parseAgentOutput(line: string): AgentOutput {
   throw new Error(`Agent emitted an unsupported event: ${line}`);
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function requireBackendStartupEvents(value: unknown): ToolBackendStartupEvent[] {
+  if (!Array.isArray(value)) {
+    throw new Error("Tool backend start must return an array of discovery events");
+  }
+
+  return value.map((event) => {
+    if (
+      !isRecord(event) ||
+      event.type !== "mcp_discovery" ||
+      !Array.isArray(event.serverCommand) ||
+      !event.serverCommand.every((part) => typeof part === "string") ||
+      !isRecord(event.capabilities) ||
+      !Array.isArray(event.tools) ||
+      !event.tools.every(
+        (tool) => isRecord(tool) && typeof tool.name === "string"
+      ) ||
+      typeof event.durationMs !== "number" ||
+      !Number.isFinite(event.durationMs) ||
+      event.durationMs < 0 ||
+      (event.serverInfo !== undefined &&
+        (!isRecord(event.serverInfo) ||
+          typeof event.serverInfo.name !== "string" ||
+          typeof event.serverInfo.version !== "string")) ||
+      (event.capabilitySnapshotMatches !== undefined &&
+        typeof event.capabilitySnapshotMatches !== "boolean") ||
+      (event.toolSnapshotMatches !== undefined &&
+        typeof event.toolSnapshotMatches !== "boolean") ||
+      (event.driftedTools !== undefined &&
+        (!Array.isArray(event.driftedTools) ||
+          !event.driftedTools.every((tool) => typeof tool === "string")))
+    ) {
+      throw new Error(
+        "Tool backend start returned an invalid event; only MCP discovery evidence is accepted"
+      );
+    }
+    return event as ToolBackendStartupEvent;
+  });
+}
+
 export async function executeAgentProcess(
   options: AgentProcessOptions
 ): Promise<ExecutionResult> {
@@ -201,8 +248,8 @@ export async function executeAgentProcess(
     (options.scenario.performance?.maxDurationMs ?? 15_000) * 2,
     5_000
   );
-  const sanitize = <T>(value: T): T =>
-    (options.toolBackend?.redact(value) ?? value) as T;
+  const redact = createRedactor(options.toolBackend?.redaction);
+  const sanitize = <T>(value: T): T => redact(value) as T;
 
   const snapshot = (): ExecutionResult => ({
     command: options.command,
@@ -225,7 +272,10 @@ export async function executeAgentProcess(
 
   if (options.toolBackend) {
     try {
-      for (const event of await options.toolBackend.start(hardTimeoutMs)) record(event);
+      const startupEvents = requireBackendStartupEvents(
+        await options.toolBackend.start(hardTimeoutMs)
+      );
+      for (const event of startupEvents) record(event);
     } catch (error) {
       throw new AgentExecutionError(
         sanitize(error instanceof Error ? error.message : String(error)),

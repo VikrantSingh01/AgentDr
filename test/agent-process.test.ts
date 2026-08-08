@@ -261,9 +261,6 @@ describe("child agent protocol", () => {
               resultBytes: 20
             };
           },
-          redact(value) {
-            return value;
-          },
           async close() {}
         };
         const protectedScenario: Scenario = {
@@ -353,9 +350,6 @@ describe("child agent protocol", () => {
           durationMs: 50,
           resultBytes: 12
         };
-      },
-      redact(value) {
-        return value;
       },
       async close() {}
     };

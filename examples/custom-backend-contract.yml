@@ -1,0 +1,21 @@
+schemaVersion: "0.1"
+id: custom-backend-record-lookup
+input:
+  message: Look up record R-1 and report its public fields.
+expect:
+  tools:
+    required:
+      - records.lookup
+    maxCalls: 1
+    arguments:
+      - tool: records.lookup
+        match:
+          id: R-1
+  outcome:
+    status: completed
+    match:
+      record:
+        id: R-1
+        label: Apollo release
+performance:
+  maxDurationMs: 5000

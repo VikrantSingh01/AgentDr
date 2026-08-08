@@ -19,6 +19,16 @@
     "testing"
   ],
   "type": "module",
+  "main": "./dist/src/index.js",
+  "types": "./dist/src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "import": "./dist/src/index.js"
+    },
+    "./schema/scenario-0.1.json": "./schema/scenario-0.1.json",
+    "./package.json": "./package.json"
+  },
   "bin": {
     "agentdoctor": "dist/src/cli.js",
     "agentdoctor-mcp": "dist/src/mcp-bin.js"
@@ -50,6 +60,7 @@
     "validate:readme": "node scripts/validate-readme.mjs",
     "demo": "node dist/src/cli.js test examples/agentic-release-contract.yml -- node examples/agentic-release-assistant.mjs",
     "demo:mcp": "node dist/src/cli.js test examples/mcp-release-contract.yml",
+    "demo:backend": "npm run build && node examples/custom-backend.mjs",
     "expense:demo": "npm run build && node dist/src/cli.js test examples/expense-steward/contract.yml -- node examples/expense-steward/adapter.mjs",
     "expense:mutate": "npm run build && node examples/expense-steward/mutation-harness.mjs",
     "expense:corpus": "npm run build && node examples/expense-steward/false-positive-corpus.mjs",

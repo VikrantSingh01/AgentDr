@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { dirname, extname, resolve } from "node:path";
 import { Ajv2020 } from "ajv/dist/2020.js";
 import { parse } from "yaml";
-import { RESERVED_REDACTION_KEYS } from "./redaction.js";
+import { assertSafeReportRedaction } from "./redaction.js";
 import { lintScenario } from "./scenario-linter.js";
 import { scenarioSchema } from "./scenario-schema.js";
 import type {
@@ -132,13 +132,7 @@ export async function loadScenario(path: string): Promise<{
   }
 
   const scenario = document as Scenario;
-  for (const key of scenario.mcp?.redaction?.keys ?? []) {
-    if (RESERVED_REDACTION_KEYS.has(key)) {
-      throw new Error(
-        `Invalid redaction key ${key}: structural report fields cannot be redacted`
-      );
-    }
-  }
+  assertSafeReportRedaction(scenario.mcp?.redaction);
   for (const argumentExpectation of scenario.expect.tools?.arguments ?? []) {
     if (!argumentExpectation.schema) continue;
     try {

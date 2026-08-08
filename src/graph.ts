@@ -11,9 +11,15 @@ import {
   evaluateRun
 } from "./evaluator.js";
 import { McpStdioProxy } from "./mcp-stdio-proxy.js";
-import { redactRunReport } from "./redaction.js";
+import {
+  createRedactor,
+  redactRunReport,
+  snapshotSafeReportRedaction,
+  type RedactionOptions
+} from "./redaction.js";
 import { writeRunReport } from "./reporter.js";
 import { loadScenario } from "./scenario-loader.js";
+import type { ToolBackend, ToolBackendFactory } from "./tool-backend.js";
 import type {
   CompletedRun,
   Decision,
@@ -31,6 +37,8 @@ interface GraphState {
   outputDirectory: string;
   requestedCommand: string[];
   requestedMcpCommand?: string[];
+  toolBackendFactory?: ToolBackendFactory;
+  backendRedaction?: RedactionOptions;
   scenario?: Scenario;
   fixtures?: ResolvedFixtures;
   command?: string[];
@@ -47,6 +55,7 @@ export interface RunOptions {
   cwd?: string;
   outputDirectory?: string;
   mcpCommand?: string[];
+  toolBackendFactory?: ToolBackendFactory;
 }
 
 const graph: Record<GraphNodeName, GraphNodeName | null> = {
@@ -60,6 +69,73 @@ const graph: Record<GraphNodeName, GraphNodeName | null> = {
 function requireValue<T>(value: T | undefined, name: string): T {
   if (value === undefined) throw new Error(`Graph state is missing ${name}`);
   return value;
+}
+
+function deepFreeze<T>(value: T): T {
+  if (typeof value !== "object" || value === null || Object.isFrozen(value)) {
+    return value;
+  }
+  Object.freeze(value);
+  for (const nestedValue of Object.values(value as Record<string, unknown>)) {
+    deepFreeze(nestedValue);
+  }
+  return value;
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function failedExecution(
+  state: GraphState,
+  startedAt: Date
+): ExecutionResult {
+  return {
+    command: requireValue(state.command, "command"),
+    startedAt: startedAt.toISOString(),
+    durationMs: Date.now() - startedAt.getTime(),
+    evidence: [],
+    stderr: ""
+  };
+}
+
+function requireToolBackend(value: unknown): ToolBackend {
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    !["start", "call", "close"].every(
+      (method) => typeof (value as Record<string, unknown>)[method] === "function"
+    )
+  ) {
+    throw new Error(
+      "Tool backend factory must return an object implementing start, call, and close"
+    );
+  }
+  return value as ToolBackend;
+}
+
+async function closeBackendCandidate(value: unknown): Promise<void> {
+  if (
+    typeof value === "object" &&
+    value !== null &&
+    typeof (value as { close?: unknown }).close === "function"
+  ) {
+    await (value as { close(): Promise<void> }).close();
+  }
+}
+
+function redactBackendError(backend: ToolBackend, error: unknown): string {
+  return String(createRedactor(backend.redaction)(errorMessage(error)));
+}
+
+function appendCleanupFailure(
+  error: AgentExecutionError,
+  detail: string
+): AgentExecutionError {
+  const message = `${error.message}; tool backend cleanup failed: ${detail}`;
+  return error instanceof AgentAuthorizationDeniedError
+    ? new AgentAuthorizationDeniedError(message, error.execution)
+    : new AgentExecutionError(message, error.execution);
 }
 
 async function runNode(node: GraphNodeName, state: GraphState): Promise<void> {
@@ -79,6 +155,7 @@ async function runNode(node: GraphNodeName, state: GraphState): Promise<void> {
 
   if (node === "execute") {
     const scenario = requireValue(state.scenario, "scenario");
+    const fixtures = requireValue(state.fixtures, "fixtures");
     const mcpConfiguration = scenario.mcp
       ? {
           ...scenario.mcp,
@@ -88,20 +165,71 @@ async function runNode(node: GraphNodeName, state: GraphState): Promise<void> {
           }
         }
       : undefined;
-    const toolBackend = mcpConfiguration
-      ? new McpStdioProxy(mcpConfiguration, state.cwd)
-      : undefined;
+    const backendStartedAt = new Date();
+    let toolBackend: ToolBackend | undefined;
+    let backendCandidate: unknown;
+    try {
+      if (state.toolBackendFactory && mcpConfiguration) {
+        throw new Error(
+          "toolBackendFactory cannot be combined with scenario.mcp; choose one dispatch backend"
+        );
+      }
+      if (state.toolBackendFactory) {
+        backendCandidate = state.toolBackendFactory({
+          scenario: deepFreeze(structuredClone(scenario)),
+          fixtures: deepFreeze(structuredClone(fixtures)),
+          cwd: state.cwd
+        });
+        toolBackend = requireToolBackend(backendCandidate);
+        state.backendRedaction = snapshotSafeReportRedaction(
+          toolBackend.redaction
+        );
+      } else if (mcpConfiguration) {
+        toolBackend = new McpStdioProxy(mcpConfiguration, state.cwd);
+      }
+    } catch (error) {
+      let cleanupDetail = "";
+      try {
+        await closeBackendCandidate(backendCandidate);
+      } catch (closeError) {
+        cleanupDetail = `; tool backend cleanup failed: ${errorMessage(closeError)}`;
+      }
+      throw new AgentExecutionError(
+        `Tool backend setup failed: ${errorMessage(error)}${cleanupDetail}`,
+        failedExecution(state, backendStartedAt)
+      );
+    }
+
+    let executionError: unknown;
     try {
       state.execution = await executeAgentProcess({
         scenario,
-        fixtures: requireValue(state.fixtures, "fixtures"),
+        fixtures,
         command: requireValue(state.command, "command"),
         cwd: state.cwd,
         toolBackend
       });
-    } finally {
-      await toolBackend?.close();
+    } catch (error) {
+      executionError = error;
     }
+
+    if (toolBackend) {
+      try {
+        await toolBackend.close();
+      } catch (closeError) {
+        const detail = redactBackendError(toolBackend, closeError);
+        if (executionError instanceof AgentExecutionError) {
+          throw appendCleanupFailure(executionError, detail);
+        }
+        if (executionError !== undefined) throw executionError;
+        throw new AgentExecutionError(
+          `Tool backend cleanup failed: ${detail}`,
+          requireValue(state.execution, "execution")
+        );
+      }
+    }
+
+    if (executionError !== undefined) throw executionError;
     return;
   }
 
@@ -148,6 +276,7 @@ export async function runAgentDoctor(options: RunOptions): Promise<CompletedRun>
     outputDirectory: resolve(cwd, options.outputDirectory ?? ".agentdoctor/runs"),
     requestedCommand: options.command ?? [],
     requestedMcpCommand: options.mcpCommand,
+    toolBackendFactory: options.toolBackendFactory,
     transitions: []
   };
 
@@ -233,7 +362,7 @@ export async function runAgentDoctor(options: RunOptions): Promise<CompletedRun>
 
   const report = redactRunReport(
     requireValue(state.report, "report"),
-    state.scenario?.mcp?.redaction
+    state.scenario?.mcp?.redaction ?? state.backendRedaction
   );
   state.report = report;
   state.reportPath = await writeRunReport(report, state.outputDirectory);

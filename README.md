@@ -7,15 +7,16 @@
 ## Ship agent changes with evidence, not hope
 
 Agent Doctor is a local contract-testing harness for protocol-mediated agent
-behavior. It exercises fixture or MCP workflows, records the exact action
-sequence, returns deterministic CI decisions, and can deny configured forbidden
-or unconfirmed calls before they reach a harness-managed backend.
+behavior. It exercises fixture, MCP, or custom backend workflows, records the
+exact action sequence, returns deterministic CI decisions, and can deny
+configured forbidden or unconfirmed calls before they reach a harness-managed
+backend.
 
 **Local-first · CI-ready · no model judge · inspectable evidence**
 
-> **Bounded enforcement:** prevention applies only to fixture or MCP calls routed
-> through Agent Doctor. It is not a sandbox and does not control out-of-band
-> network, filesystem, subprocess, or native MCP activity.
+> **Bounded enforcement:** prevention applies only to fixture, MCP, or custom
+> backend calls routed through Agent Doctor. It is not a sandbox and does not
+> control out-of-band network, filesystem, subprocess, or native MCP activity.
 
 ![Agent Doctor turns agent actions into evidence-backed CI decisions](docs/assets/agentdoctor-overview.png)
 
@@ -303,8 +304,9 @@ later case. Existing inline and `$file` fixtures remain supported.
 
 See the [fixture contract](examples/agentic-release-contract.yml),
 [MCP contract](examples/mcp-release-contract.yml),
-[sample adapter](examples/agentic-release-assistant.mjs), and
-[MCP server](examples/mcp-release-server.mjs).
+[sample adapter](examples/agentic-release-assistant.mjs),
+[MCP server](examples/mcp-release-server.mjs), and
+[custom backend](examples/custom-backend.mjs).
 
 ## What the MVP checks today
 
@@ -323,7 +325,7 @@ See the [fixture contract](examples/agentic-release-contract.yml),
 - missing/duplicate tools, errors, timeouts, latency, and result-size budgets;
 - configured report redaction and partial failure evidence.
 
-The repository has **140 deterministic tests across 16 files** and **eight live
+The repository has **297 deterministic tests across 28 files** and **eight live
 MCP test cases**. There is no model judge or hidden-reasoning assertion.
 
 ## Exit codes
@@ -403,11 +405,107 @@ The server exposes two tools:
 failure, `2` runtime error, and `3` safety or pre-dispatch denial. Stdout is
 reserved for MCP JSON-RPC. Server diagnostics go to stderr.
 
+## Programmatic API and custom backends
+
+Agent developers can extend Agent Doctor at three boundaries without changing
+the deterministic evaluator:
+
+| Extension point | Use it for |
+|---|---|
+| JSONL adapter | Connect an agent framework to the observable `run_start`, tool, confirmation, and final event protocol. |
+| `runAgentDoctor` | Embed contract runs in a test harness, release service, or developer tool and consume a typed `CompletedRun`. |
+| `ToolBackendFactory` | Route authorized calls to an HTTP API, gRPC client, in-process test double, or another transport. |
+
+The package is ESM-only and supports Node.js 20 or newer:
+
+```typescript
+import {
+  createRedactor,
+  runAgentDoctor,
+  type ToolBackendFactory
+} from "agentdoctor";
+
+const backendFactory: ToolBackendFactory = () => {
+  const redaction = { keys: ["accessToken"] };
+  const redact = createRedactor(redaction);
+  return {
+    redaction,
+    async start(timeoutMs) {
+      await service.connect({ timeoutMs });
+      return [];
+    },
+    async call(tool, argumentsValue) {
+      const startedAt = Date.now();
+      const result = await service.call(tool, argumentsValue);
+      return {
+        result,
+        evidenceResult: redact(result),
+        source: "internal-api",
+        durationMs: Date.now() - startedAt,
+        resultBytes: Buffer.byteLength(JSON.stringify(result), "utf8")
+      };
+    },
+    async close() {
+      await service.close();
+    }
+  };
+};
+
+const { report, reportPath } = await runAgentDoctor({
+  scenarioPath: "contracts/release.yml",
+  command: ["node", "adapters/release-agent.mjs"],
+  toolBackendFactory: backendFactory
+});
+```
+
+A custom backend replaces fixture and MCP dispatch for that run. Combining
+`toolBackendFactory` with `scenario.mcp` is rejected instead of silently
+skipping MCP discovery and conformance checks. The factory constructs the
+backend synchronously; asynchronous connection setup belongs in `start`. Agent
+Doctor calls `close` after successful and failed runs, and records a cleanup
+failure as runtime exit `2` without discarding evidence already captured.
+The factory itself should only construct the backend descriptor. Acquire
+resources in `start`, where cleanup ownership and the run timeout apply, and do
+not include credentials or sensitive values in factory-thrown errors.
+Factory context contains deeply read-only, frozen snapshots of the validated
+scenario and resolved fixtures, so backend code cannot rewrite the contract the
+runner later evaluates.
+
+Pre-dispatch enforcement runs before `call`, so denied requests never reach a
+custom service. Return `isError: true` for an ordinary tool-level failure; throw
+only when transport or backend execution failed and the run should stop.
+`result` is sent to the adapter. When present, `evidenceResult` is recorded and
+evaluated in its place, which lets a backend omit sensitive response fields from
+evidence. Declarative `redaction` keys are validated against structural report
+fields, then applied by Agent Doctor after raw evidence evaluation and before
+persistence. A backend therefore cannot redact the decision, finding identity,
+severity, evidence lifecycle, or other verdict structure.
+
+Custom backends extend dispatch, not verdict semantics. They cannot suppress or
+downgrade deterministic findings, and startup may emit only validated MCP
+discovery evidence, never tool, confirmation, lifecycle, or final events. Add
+portable behavior rules to the scenario contract so the same assertions
+continue to hold across every backend.
+
+Run the complete source-checkout example:
+
+```bash
+npm run demo:backend
+```
+
+See the [custom backend runner](examples/custom-backend.mjs),
+[adapter](examples/custom-backend-agent.mjs),
+[contract](examples/custom-backend-contract.yml), and
+[backend API reference](docs/technical-reference.md#custom-tool-backends).
+The published JSON Schema remains resolvable at
+`agentdoctor/schema/scenario-0.1.json`.
+
 ## Evidence and privacy
 
 Reports are written under `.agentdoctor/runs/` with graph transitions, ordered
 evidence, findings, diagnostics, and the decision. Evaluation uses raw in-memory
-evidence; configured key-based redaction is applied at the report boundary.
+evidence except when a custom backend deliberately supplies `evidenceResult`.
+Configured MCP or custom backend redaction is applied at the report boundary.
 That redaction is not general DLP, so use sanitized test data and review reports
 before sharing them.
 

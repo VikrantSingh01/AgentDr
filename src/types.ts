@@ -215,7 +215,7 @@ export type EvidenceEvent =
       callId: string;
       tool: string;
       result: unknown;
-      source?: "fixture" | "mcp";
+      source?: string;
       durationMs?: number;
       resultBytes?: number;
       isError?: boolean;

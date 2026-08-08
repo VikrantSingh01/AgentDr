@@ -389,6 +389,94 @@ content, and top-level metadata preserve the full envelope.
 Tool-level `isError` results and protocol-level errors are distinct. Both leave
 inspectable evidence, while protocol/runtime failures normally exit `2`.
 
+## Custom tool backends
+
+The package root exports `runAgentDoctor`, `ToolBackendFactory`, `ToolBackend`,
+the report and evidence types, and `createRedactor`. A custom backend lets a host
+route protocol-mediated tool calls to a transport other than fixtures or MCP:
+
+```typescript
+import { runAgentDoctor, type ToolBackendFactory } from "agentdoctor";
+
+const backendFactory: ToolBackendFactory = ({ scenario, fixtures, cwd }) => ({
+  redaction: { keys: ["accessToken"] },
+  async start(timeoutMs) {
+    return [];
+  },
+  async call(tool, argumentsValue) {
+    return {
+      result: await dispatch(tool, argumentsValue),
+      source: "custom",
+      durationMs: 0,
+      resultBytes: 0
+    };
+  },
+  async close() {}
+});
+
+await runAgentDoctor({
+  scenarioPath: "contract.yml",
+  command: ["node", "agent.mjs"],
+  toolBackendFactory: backendFactory
+});
+```
+
+The factory is called once after scenario loading. It receives deeply read-only,
+frozen snapshots of the validated scenario and fully resolved fixtures, plus the
+absolute working directory. Mutating those snapshots cannot alter the
+authoritative contract or evidence evaluation. The factory must return a backend
+synchronously so asynchronous initialization stays inside the timed execution
+lifecycle. It must not acquire resources or include sensitive values in thrown
+errors before returning the descriptor, because no accepted backend exists yet
+to own cleanup or redaction. The backend has three lifecycle methods and one
+optional privacy setting:
+
+| Method | Contract |
+|---|---|
+| `start(timeoutMs)` | Perform asynchronous setup before the child starts. The implementation must honor the supplied hard timeout. Return `[]` for custom transports; only validated `mcp_discovery` events are accepted as startup evidence. |
+| `call(tool, argumentsValue)` | Dispatch one authorized call and return its adapter payload, evidence metadata, source, duration, and serialized byte count. Calls are sequential. |
+| `close()` | Release resources once after startup, including agent, authorization, and startup failures. A cleanup failure becomes a runtime finding while preserving captured evidence. |
+| `redaction` | Optional key-based `RedactionOptions` applied by Agent Doctor to diagnostics and the complete report after evaluation. Structural report keys are rejected. |
+
+`ToolBackendCallResult.result` is sent to the agent adapter. Optional
+`evidenceResult` replaces it in `tool_result` evidence, so it is also the value
+seen by `$fromResult` and other evaluators. Use it when the adapter needs a field
+that the evidence model must never retain. If an evaluator must inspect a field
+but the persisted report must redact it, omit `evidenceResult` and declare the
+field in `redaction.keys` instead. Evaluation then sees the raw value and
+persistence sees the sanitized copy. Use the exported `createRedactor` with the
+same options when constructing a sanitized `evidenceResult`.
+
+Agent Doctor owns report redaction rather than accepting an arbitrary report
+transform. Keys such as `decision`, `status`, `findings`, `severity`,
+`evidence`, and lifecycle fields are reserved and rejected during backend
+setup. Agent Doctor snapshots accepted options before `start`, so later mutation
+cannot bypass validation. This makes the rule that a backend cannot rewrite a
+verdict enforceable.
+
+Set `isError: true` for a completed tool call that returned an application-level
+error. Throw from `call` only for a transport or runtime failure that should
+terminate execution and produce exit `2`. The `source` value is a stable label
+in evidence; MCP-only latency, response-size, discovery, and schema checks do
+not apply to a custom source.
+
+Setting `toolBackendFactory` replaces all automatic fixture dispatch. The
+resolved fixture map in the factory context is available for an intentional
+fallback, but Agent Doctor does not consult it after a custom backend is chosen.
+Custom backends and `scenario.mcp` are mutually exclusive because otherwise a
+run could silently skip configured discovery and conformance checks.
+
+Pre-dispatch authorization is backend-independent. A denied call produces
+`requested` and `denied` evidence and never invokes `call`. This controls only
+dispatch routed through the harness. Out-of-band network, filesystem,
+subprocess, or native MCP activity remains outside Agent Doctor's boundary.
+
+The backend is not an evaluator plugin. Scenario expectations remain the only
+source of deterministic findings, and backend code cannot waive, downgrade, or
+replace them. Startup output is runtime-validated and cannot inject tool calls,
+confirmations, lifecycle states, or final outcomes. This keeps a contract
+portable across fixture, MCP, and custom dispatch paths.
+
 ## Confirmation safety
 
 Confirmation is explicit evidence:
@@ -444,6 +532,8 @@ runtime failure also occurs.
 
 Evaluation uses raw in-memory evidence. Immediately before persistence,
 `redactRunReport` sanitizes the complete report and returns that sanitized copy.
+For custom backend runs, the backend's validated declarative redaction options
+are passed through that same trusted report sanitizer.
 
 The sanitizer handles nested values, JSON strings, common key/value diagnostic
 text, split command flags, final output, stderr, and MCP diagnostics. It applies
