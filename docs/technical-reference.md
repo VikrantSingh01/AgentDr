@@ -17,7 +17,7 @@ sends `run_start` and `tool_result`; the agent emits `tool_call`,
 sequential: an agent must observe a pending result before another action.
 
 Runtime guardrails cap child stdout/stderr at 1 MiB each and evidence at 10,000
-events. The hard timeout starts before MCP discovery and covers the entire
+events. The hard timeout starts before backend startup and covers the entire
 execute phase. POSIX process groups receive graceful then forced termination;
 the Windows fallback attempts graceful then forced termination of the direct
 child only and does not guarantee descendant cleanup.
@@ -391,9 +391,11 @@ inspectable evidence, while protocol/runtime failures normally exit `2`.
 
 ## Custom tool backends
 
-The package root exports `runAgentDoctor`, `ToolBackendFactory`, `ToolBackend`,
-the report and evidence types, and `createRedactor`. A custom backend lets a host
-route protocol-mediated tool calls to a transport other than fixtures or MCP:
+The package root exports `runAgentDoctor`, `RunOptions`, `createRedactor`,
+`RedactionOptions`, `ToolBackendFactory`, `ToolBackendContext`, `ToolBackend`,
+`ToolBackendCallResult`, `ToolBackendStartupEvent`, `DeepReadonly`, and the
+report, evidence, scenario, and fixture types. A custom backend lets a host route
+protocol-mediated tool calls to a transport other than fixtures or MCP:
 
 ```typescript
 import { runAgentDoctor, type ToolBackendFactory } from "agentdoctor";
@@ -431,9 +433,9 @@ errors before returning the descriptor, because no accepted backend exists yet
 to own cleanup or redaction. The backend has three lifecycle methods and one
 optional privacy setting:
 
-| Method | Contract |
+| Member | Contract |
 |---|---|
-| `start(timeoutMs)` | Perform asynchronous setup before the child starts. The implementation must honor the supplied hard timeout. Return `[]` for custom transports; only validated `mcp_discovery` events are accepted as startup evidence. |
+| `start(timeoutMs)` | Perform asynchronous setup before the child starts. The implementation must honor the supplied hard timeout and return `ToolBackendStartupEvent[]`. Custom transports should return `[]`; only validated `mcp_discovery` events are accepted. |
 | `call(tool, argumentsValue)` | Dispatch one authorized call and return its adapter payload, evidence metadata, source, duration, and serialized byte count. Calls are sequential. |
 | `close()` | Release resources once after startup, including agent, authorization, and startup failures. A cleanup failure becomes a runtime finding while preserving captured evidence. |
 | `redaction` | Optional key-based `RedactionOptions` applied by Agent Doctor to diagnostics and the complete report after evaluation. Structural report keys are rejected. |
@@ -497,10 +499,10 @@ responsible for those guarantees.
 ## Pre-dispatch enforcement
 
 Set `enforcement.preDispatch: true` to check forbidden-tool and confirmation
-policies before a protocol-mediated call reaches a fixture or MCP server. The
-harness records `requested`, then either `authorized` and `dispatched`, or
-`denied`. Successful backend completion adds `completed`; denied requests have
-no dispatch, completion, or tool-result evidence.
+policies before a protocol-mediated call reaches a fixture, MCP server, or
+custom backend. The harness records `requested`, then either `authorized` and
+`dispatched`, or `denied`. Successful backend completion adds `completed`;
+denied requests have no dispatch, completion, or tool-result evidence.
 
 Authorization denial fails the run with critical exit code `3`. Because the
 current JSONL protocol has no negotiated denial-response event, the harness
@@ -510,16 +512,16 @@ network, filesystem, subprocess, native MCP, or other out-of-band capabilities.
 
 ## Trust boundaries
 
-Scenario files can launch adapter and MCP server commands and therefore are
-trusted code. Run scenarios from untrusted sources only in an appropriately
-isolated environment.
+Scenario files can launch adapter and MCP server commands, while programmatic
+hosts can execute arbitrary custom backend factories. All are trusted code. Run
+them from untrusted sources only in an appropriately isolated environment.
 
-Agent Doctor observes events cooperatively emitted over JSONL and MCP calls made
-through its harness proxy. Observe mode evaluates after events arrive;
-enforcement mode adds a pre-dispatch gate for configured, harness-mediated
-calls. The runner is not a sandbox or complete side-effect monitor. The MCP path
-validates server interaction through the harness; it does not exercise a child
-agent's own native MCP client stack.
+Agent Doctor observes events cooperatively emitted over JSONL and calls made
+through its fixture, MCP, or custom backend dispatch path. Observe mode evaluates
+after events arrive; enforcement mode adds a pre-dispatch gate for configured,
+harness-mediated calls. The runner is not a sandbox or complete side-effect
+monitor. The MCP path validates server interaction through the harness; it does
+not exercise a child agent's own native MCP client stack.
 
 ## Partial failures
 

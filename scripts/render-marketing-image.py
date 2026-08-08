@@ -296,7 +296,7 @@ def render_overview():
     write(
         draw,
         (78, 566),
-        "Local-first boundary: no trace leaves the machine; fixtures and MCP calls are mediated by the harness, not a sandbox.",
+        "Local-first boundary: fixture, MCP, and custom calls are harness-mediated; out-of-band activity is not sandboxed.",
         BODY_BOLD,
         NAVY,
     )
@@ -305,34 +305,34 @@ def render_overview():
         draw,
         (54, 632, 414, 812),
         "LOCAL-FIRST",
-        "No trace leaves the host",
-        "No per-run model call.\nDeterministic checks run in milliseconds,\nnot minutes.",
+        "Reports stay on the host",
+        "No hosted model judge.\nConfigured agents and backends may\nstill call remote services.",
         GREEN,
     )
     metric_card(
         draw,
         (434, 632, 794, 812),
         "ADVERSARIAL MEASUREMENT",
-        "96.7% mutation score",
-        "29 killed. The one survivor is\nfree-text prose. 4 invalid + 4\nbehaviour-preserving excluded.",
+        "98.1% / 98.3%",
+        "em-triage / expense steward\n52 + 59 mutants killed.\nOne survivor in each domain.",
         BLUE,
         TITLE,
     )
     metric_card(
         draw,
         (814, 632, 1174, 812),
-        "WHY ONE SURVIVED",
-        "Free-text prose payload",
-        "Every structural defect class is\ncaught deterministically. The one\nsurviving mutant is free-text prose.",
+        "RESIDUAL GAPS",
+        "Two known survivors",
+        "Free-text summary fidelity.\nAggregate numeric sum.\nBoth explicitly documented.",
         AMBER,
     )
     metric_card(
         draw,
         (1194, 632, 1546, 812),
-        "ACKNOWLEDGED WEAKNESS",
-        "Precision is still open",
-        "8 of 11 correct-behaviour worlds\nstill wrongly blocked (72.7%).\nThis is the open problem.",
-        RED,
+        "PRECISION",
+        "0 of 11 false positives",
+        "In each domain's correct-behaviour\nworlds (0.0%). Published alongside\nmutation score.",
+        GREEN,
     )
 
     write(
@@ -395,9 +395,10 @@ def assert_architecture_layout(draw):
         ("verdict", (1332, 386, 1718, 548), None),
         ("crossrun", (1332, 592, 1718, 748), None),
         ("policy", (346, 610, 612, 720), "harness"),
-        ("backends", (652, 592, 850, 730), "harness"),
-        ("backend-fixtures", (674, 646, 828, 676), "backends"),
-        ("backend-mcp", (674, 688, 828, 718), "backends"),
+        ("backends", (652, 592, 850, 746), "harness"),
+        ("backend-fixtures", (674, 642, 828, 664), "backends"),
+        ("backend-mcp", (674, 672, 828, 694), "backends"),
+        ("backend-custom", (674, 702, 828, 724), "backends"),
         ("denied", (326, 766, 632, 820), None),
         ("outside", (54, 594, 292, 720), None),
         ("sidecar", (888, 770, 1310, 990), None),
@@ -432,7 +433,7 @@ def assert_architecture_layout(draw):
         ("harness-title", "AGENT DOCTOR HARNESS BOUNDARY", LABEL, (342, 332), "harness", None),
         (
             "harness-subtitle",
-            "Fixture/MCP backends are controlled only through this boundary.",
+            "Fixture, MCP, and custom dispatch stay inside this boundary.",
             SMALL,
             (342, 360),
             "harness",
@@ -506,8 +507,9 @@ def assert_architecture_layout(draw):
             "ma",
         ),
         ("backends-title", "Mediated backends", SMALL_BOLD, (751, 610), "backends", "ma"),
-        ("fixtures-text", "fixtures", SMALL_BOLD, (751, 651), "backend-fixtures", "ma"),
-        ("mcp-text", "MCP stdio", SMALL_BOLD, (751, 693), "backend-mcp", "ma"),
+        ("fixtures-text", "fixtures", SMALL_BOLD, (751, 645), "backend-fixtures", "ma"),
+        ("mcp-text", "MCP stdio", SMALL_BOLD, (751, 675), "backend-mcp", "ma"),
+        ("custom-text", "custom API", SMALL_BOLD, (751, 705), "backend-custom", "ma"),
         ("denied-text", "DENIED: no backend dispatch", SMALL_BOLD, (479, 778), "denied", "ma"),
         ("outside-title", "OUTSIDE THE HARNESS", SMALL_BOLD, (74, 612), "outside", None),
         (
@@ -620,7 +622,7 @@ def render_architecture():
         [
             ("DETERMINISTIC CORE", BLUE, WHITE),
             ("SLM SIDECAR PLANNED", AMBER, WHITE),
-            ("LOCAL ONLY", GREEN, WHITE),
+            ("LOCAL-FIRST", GREEN, WHITE),
         ],
     )
 
@@ -640,7 +642,7 @@ def render_architecture():
     write(
         draw,
         (342, 360),
-        "Fixture/MCP backends are controlled only through this boundary.",
+        "Fixture, MCP, and custom dispatch stay inside this boundary.",
         SMALL,
         MUTED,
     )
@@ -745,13 +747,15 @@ def render_architecture():
     write(draw, (479, 664), "observe = record only\nenforcement = fail closed", SMALL, MUTED, anchor="ma")
     arrow(draw, (479, 554), (479, 610), AMBER)
 
-    backends = (652, 592, 850, 730)
+    backends = (652, 592, 850, 746)
     rounded(draw, backends, WHITE, GREEN, 12, 2)
     write(draw, (751, 610), "Mediated backends", SMALL_BOLD, GREEN, anchor="ma")
-    rounded(draw, (674, 646, 828, 676), GREEN_LIGHT, GREEN, 7, 2)
-    write(draw, (751, 651), "fixtures", SMALL_BOLD, GREEN, anchor="ma")
-    rounded(draw, (674, 688, 828, 718), GREEN_LIGHT, GREEN, 7, 2)
-    write(draw, (751, 693), "MCP stdio", SMALL_BOLD, GREEN, anchor="ma")
+    rounded(draw, (674, 642, 828, 664), GREEN_LIGHT, GREEN, 7, 2)
+    write(draw, (751, 645), "fixtures", SMALL_BOLD, GREEN, anchor="ma")
+    rounded(draw, (674, 672, 828, 694), GREEN_LIGHT, GREEN, 7, 2)
+    write(draw, (751, 675), "MCP stdio", SMALL_BOLD, GREEN, anchor="ma")
+    rounded(draw, (674, 702, 828, 724), GREEN_LIGHT, GREEN, 7, 2)
+    write(draw, (751, 705), "custom API", SMALL_BOLD, GREEN, anchor="ma")
     orthogonal_arrow(draw, [(612, 666), (632, 666), (632, 662), (652, 662)], GREEN, 3)
     orthogonal_arrow(draw, [(751, 592), (751, 570), (751, 548)], GREEN, 3)
 

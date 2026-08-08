@@ -1,12 +1,13 @@
 # Agent Doctor Architecture Review
 
 Review date: 2026-07-31
+Last updated: 2026-08-08
 
 This review separates what Agent Doctor demonstrates today from the controls a
 production enforcement system would require. The current product is a local,
 deterministic behavioral contract tester. It observes cooperative JSONL events
-and harness-mediated MCP calls, evaluates them after they occur, and fails the
-run when evidence violates a scenario.
+and harness-mediated fixture, MCP, or custom backend calls, evaluates them after
+they occur, and fails the run when evidence violates a scenario.
 
 It is not a sandbox or complete side-effect monitor. It now has an optional
 pre-dispatch gate for configured calls routed through the harness, but it is not
@@ -238,7 +239,7 @@ free-text boundary, not paper over it.
 
 | Priority | Finding | Current consequence | Status |
 |---|---|---|---|
-| Critical | Enforcement is limited to harness-mediated dispatch. | Out-of-band child activity remains outside policy control. | Optional fail-closed gate added for fixture and MCP calls; isolation remains required. |
+| Critical | Enforcement is limited to harness-mediated dispatch. | Out-of-band child activity remains outside policy control. | Optional fail-closed gate added for fixture, MCP, and custom backend calls; isolation remains required. |
 | Critical | Confirmation identity is adapter-attested. | The harness can bind exact arguments but cannot prove who approved them, in which tenant, or for how long. | Structural argument binding added; trusted capability issuance remains required. |
 | High | Observation is cooperative and incomplete. | A child process can bypass JSONL and use files, network, subprocesses, or another client directly. | Boundary documented; isolation and instrumentation required. |
 | High | Scenario commands execute as trusted local code. | An untrusted scenario can launch arbitrary adapter or MCP commands with runner privileges. | Trust warning documented; isolated execution mode required. |
@@ -248,7 +249,7 @@ free-text boundary, not paper over it.
 | Medium | Snapshot checks classify exact normalized drift only. | A change is not automatically categorized as compatible, breaking, or certified safe. | Terminology corrected; compatibility analyzer is future work. |
 | Medium | Scenario semantic linting is incomplete. | Some schema-valid scenarios may still be vacuous or unable to exercise their assertions. | Core contradictions, impossible budgets, fixture reachability, fully shadowed confirmation policies, and unresolvable derived-argument references are linted; broader policy analysis remains planned. |
 | Medium | Reports lack tamper-evident provenance. | Evidence does not independently prove the scenario, executable, fixtures, or report were unchanged. | Manifest and signing design planned. |
-| Medium | Execution topology is narrow. | The MVP supports one child adapter, one stdio MCP server, and sequential calls. | Multi-server, parallel, streaming, and HTTP support planned. |
+| Medium | Execution topology is narrow. | The MVP supports one child adapter, one selected backend, and sequential calls. | `ToolBackendFactory` now supports HTTP, gRPC, in-process, or other custom dispatch. Native multi-server MCP, parallel calls, streaming, and MCP Streamable HTTP remain planned. |
 | Medium | Key-based redaction is not DLP. | Unknown, encoded, positional, or free-text secrets can remain in reports. | Boundary documented; minimize and sanitize test data. |
 
 Priorities describe architecture and product risk, not disclosed security
@@ -285,23 +286,33 @@ vulnerabilities in the repository.
 - Added `misreport-outcome` and `select-extra` mutation operators, expanding the
   scorable corpus from 34 to 53 mutants.
 - Added `--repeat N` to measure report-shape stability across identical runs.
+- Added a package-root ESM API exporting `runAgentDoctor`, `createRedactor`,
+  backend contracts, and typed report and evidence models.
+- Added `ToolBackendFactory` for HTTP, gRPC, in-process, or other custom
+  dispatch. Its context contains frozen, deeply read-only scenario and fixture
+  snapshots, and custom dispatch is mutually exclusive with scenario MCP.
+- Restricted backend startup evidence to validated MCP discovery events and
+  made backend redaction declarative, snapshotted, and unable to target verdict
+  structure.
+- Added report-preserving setup, startup, call, and cleanup failure handling for
+  third-party backends.
 
-These changes close the harness-dispatch gap for configured fixture and MCP
-calls. They do not close identity, trusted approval issuance, isolation, or
-out-of-band enforcement gaps.
+These changes close the harness-dispatch gap for configured fixture, MCP, and
+custom backend calls. They do not close identity, trusted approval issuance,
+isolation, or out-of-band enforcement gaps.
 
 ## Prioritized roadmap
 
 ### 1. Introduce an enforcement-capable invocation boundary
 
-The fixture and MCP paths now evaluate configured policy before forwarding a
-call and produce separate lifecycle evidence. Keep strengthening this boundary
-with a negotiated denial protocol and host integrations that cannot bypass
-dispatch.
+The fixture, MCP, and custom backend paths now evaluate configured policy before
+forwarding a call and produce separate lifecycle evidence. Keep strengthening
+this boundary with a negotiated denial protocol and host integrations that
+cannot bypass dispatch.
 
 Acceptance criteria:
 
-- complete: denied fixture/MCP calls do not reach the backend;
+- complete: denied fixture, MCP, or custom backend calls do not reach the backend;
 - complete: reports distinguish requested, denied, and dispatched calls;
 - complete: E2E tests prove denial has no dispatch, result, or completion;
 - remaining: negotiate denial responses and integrate external connectors.
@@ -349,9 +360,10 @@ nondeterministic model execution.
 ### 6. Broaden adapters and topology
 
 Add native MCP-client observation, multiple servers, parallel and streaming
-calls, and an HTTP transport. Framework adapters should preserve the same
-evidence vocabulary while documenting which activity each integration can and
-cannot observe.
+calls, and MCP Streamable HTTP transport. The shipped `ToolBackendFactory`
+already supports custom HTTP or other service dispatch without changing the
+evaluator. Framework adapters should preserve the same evidence vocabulary while
+documenting which activity each integration can and cannot observe.
 
 ### 7. Classify MCP compatibility separately from drift
 
@@ -365,9 +377,9 @@ certification.
 The final deterministic contract reached 98.1% mutation score (52 killed, 1
 survivor / 53 scorable). Its negative control scored 3.8% (2 killed, 51
 survivors / 53 scorable). The corpus ended at 0 of 11 false positives (0.0%) and
-0 over-blocked behaviour-preserving mutants. The seeded-fault suite catches 10 of
-10 faults and keeps 2 correct-behaviour baselines; AgentDr itself has 285 tests
-across 25 files.
+0 over-blocked behaviour-preserving mutants. The seeded end-to-end suite covers
+8 fault-detection and 3 baseline runs; AgentDr itself has 297 tests across 28
+files.
 
 The relational join over evidence has shipped: an argument can be asserted
 against the lookup result for the same record by shared key rather than by call

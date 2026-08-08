@@ -1,6 +1,6 @@
 # Reliable Agentic AI Is a Contract-Testing Problem
 
-*A practical guide to testing tool-using agents through observable action contracts, deterministic replay, and real Model Context Protocol stdio boundaries.*
+*A practical guide to testing tool-using agents through observable action contracts, deterministic replay, real Model Context Protocol stdio boundaries, and custom programmatic backends.*
 
 Tool-using AI changes the unit of failure. A conventional application returns a value; an agent may choose a tool, construct arguments, wait for a result, revise its plan, call a mutating tool, and then summarize what happened. The final sentence is only the last artifact in a much larger execution.
 
@@ -105,7 +105,7 @@ function chooseNextAction(state: State): Action {
 
 The runner enforces the loop's mechanics at event arrival time. When it accepts a `tool_call`, it synchronously records the call ID and marks that call pending before starting the asynchronous backend request. It clears the pending state only after recording the result and writing it back to the child. A `final` event or second action that arrives in between is therefore rejected immediately; a backend promise that resolves later cannot make the premature event valid. Call IDs must also be unique, arguments must be objects, output after `final` is forbidden, and a successful exit requires a final event. Those rules do not make the planner intelligent, but they make its externally visible state machine testable.
 
-The seeded-fault suite catches 10 of 10 seeded faults plus 2 correct-behaviour baselines. Two representative regressions are worth reading: one changes the structured summary to claim the release is ready with zero blockers even though the tool result contains an open blocker. The other calls `calendar.create_event` without emitting confirmation. The first is a quality failure; the second is a critical safety failure. Both are found without judging natural-language style.
+The seeded end-to-end suite covers 8 fault-detection and 3 baseline runs. Two representative regressions are worth reading: one changes the structured summary to claim the release is ready with zero blockers even though the tool result contains an open blocker. The other calls `calendar.create_event` without emitting confirmation. The first is a quality failure; the second is a critical safety failure. Both are found without judging natural-language style.
 
 ## Confirmation Is a One-Shot, Bindable Assertion
 
@@ -141,6 +141,7 @@ flowchart LR
     B -->|deterministic| F[File or inline fixtures]
     B -->|live| P[MCP stdio proxy]
     P <-->|MCP JSON-RPC over stdio| M[MCP server]
+    B -->|custom| C[ToolBackendFactory<br/>HTTP · gRPC · in-process]
     G --> E[Sequenced evidence]
     E --> V[Deterministic evaluators]
     V --> R[JSON report and CI exit code]
@@ -170,17 +171,73 @@ Both commands use the same `McpStdioProxy.start` path as scenario execution. Sna
 
 The authoritative references are the [MCP specification](https://modelcontextprotocol.io/specification/latest), the SDK's [v2 client documentation](https://ts.sdk.modelcontextprotocol.io/v2/clients/), and its [v2 server documentation](https://ts.sdk.modelcontextprotocol.io/v2/servers/).
 
-## Deterministic Replay and Live MCP Answer Different Questions
+## Fixture, MCP, and Custom Backends Answer Different Questions
 
-The repository runs the same state-driven agent in two modes.
+The repository supports three dispatch paths over the same JSONL adapter
+contract.
 
 Fixture replay executes the adapter live but resolves JSONL-mediated tool calls from versioned inline or file-backed values. Ordered `$cases` can select distinct responses by argument subset and zero-based per-tool call index, which makes repeated retrieval and pagination workflows deterministic. It is fast and repeatable for those responses, but it does not intercept arbitrary child-process side effects or make model behavior deterministic. It is well suited to planner regressions: given the same recorded observations, did the agent select the expected tools and produce the expected structured assessment?
 
 Live MCP starts a local stdio server and exercises initialization, discovery, calls, result decoding, deadlines, shutdown, and server diagnostics. The demo still uses deterministic local data. It tests a real transport and SDK implementation, not production networking, authentication, external APIs, or model nondeterminism.
 
-Both modes are necessary. Fixture replay isolates mediated responses from backend variability; live MCP validates integration behavior. Calling fixture replay "full deterministic reproduction" would be inaccurate because the agent process is still executing and a model-backed agent may vary. Calling the local MCP demo a production integration test would be equally inaccurate.
+A custom backend routes authorized calls through `ToolBackendFactory` to an HTTP
+API, gRPC client, in-process test double, or another transport. It shares the
+same evidence, evaluator, enforcement, and report model without requiring an MCP
+server process.
+
+Each path answers a different question. Fixture replay isolates mediated
+responses from backend variability; live MCP validates protocol and SDK
+integration; a custom backend validates another service boundary while keeping
+the contract portable. Calling fixture replay "full deterministic reproduction"
+would be inaccurate because the agent process is still executing and a
+model-backed agent may vary. Calling the local MCP demo a production integration
+test would be equally inaccurate.
 
 Agent Doctor also includes `--repeat N` for a kind of nondeterminism that a single-run contract cannot see. A contract judges one run at a time; if the report shape depends on the run, every individual run can pass while the product remains unstable. Repeating three GitHub Copilot runs against an identical prompt and identical fixtures produced 23 paths that appeared in some runs and not others. Running the same command against the scripted agent reported 18 paths identical in every run, so the check discriminates rather than simply complaining.
+
+## Extend Dispatch Without Extending Verdicts
+
+The package root exposes `runAgentDoctor` and typed backend, scenario, evidence,
+and report contracts. A host can embed a run directly and supply a
+`ToolBackendFactory` without importing internal `dist/src/*` paths:
+
+```typescript
+import { runAgentDoctor, type ToolBackendFactory } from "agentdoctor";
+
+const backendFactory: ToolBackendFactory = ({ cwd }) => ({
+  redaction: { keys: ["accessToken"] },
+  async start(timeoutMs) {
+    await service.connect({ cwd, timeoutMs });
+    return [];
+  },
+  async call(tool, argumentsValue) {
+    const startedAt = Date.now();
+    const result = await service.dispatch(tool, argumentsValue);
+    return {
+      result,
+      source: "internal-api",
+      durationMs: Date.now() - startedAt,
+      resultBytes: Buffer.byteLength(JSON.stringify(result), "utf8")
+    };
+  },
+  async close() {
+    await service.close();
+  }
+});
+
+const completed = await runAgentDoctor({
+  scenarioPath: "contracts/release.yml",
+  command: ["node", "adapters/release-agent.mjs"],
+  toolBackendFactory: backendFactory
+});
+```
+
+The factory receives frozen, deeply read-only scenario and fixture snapshots.
+Custom dispatch and scenario MCP are mutually exclusive, `start` can emit only
+validated MCP discovery evidence, and declarative redaction cannot target
+verdict structure. Setup, startup, transport, and cleanup failures still produce
+inspectable runtime reports. These constraints let developers extend dispatch
+without turning backend code into an evaluator plugin or a policy bypass.
 
 ## Snapshot Capabilities and Tool Contracts, Not Incidental JSON
 
@@ -221,7 +278,7 @@ The MCP scenario and runner separate deadlines from observed policy limits:
 - `maxToolDurationMs` fails a completed call whose observed latency exceeds policy.
 - `maxResponseBytes` fails a completed call whose serialized SDK result is too large.
 
-The runner starts its clock before MCP startup and gives the child process only the hard-timeout budget left after discovery. That hard timeout is `max(2 * (performance.maxDurationMs ?? 15000), 5000)`, so backend startup and child execution share one total wall-clock cap. The configured `performance.maxDurationMs` remains a separate end-to-end quality assertion over the measured run, including startup; it is not the cancellation deadline.
+The runner starts its clock before backend startup and gives the child process only the hard-timeout budget left after startup. That hard timeout is `max(2 * (performance.maxDurationMs ?? 15000), 5000)`, so backend startup and child execution share one total wall-clock cap. The configured `performance.maxDurationMs` remains a separate end-to-end quality assertion over the measured run, including startup; it is not the cancellation deadline.
 
 For each MCP result, `resultBytes` is the UTF-8 byte length of `JSON.stringify(protocolResult)` on the SDK result before decoding or redaction. In precise terms, the metric is **serialized SDK result bytes**. It is neither raw JSON-RPC wire size, which would include framing, nor the size of the decoded value sent to the agent.
 
@@ -277,17 +334,17 @@ The JSON report remains the diagnostic source of truth. Terminal output names ea
 
 ## What the Current Test Suite Actually Demonstrates
 
-AgentDr itself currently has 285 tests across 25 files. Their value is not the number; it is the range of deliberately hostile conditions around the contract boundary.
+AgentDr itself currently has 297 tests across 28 files. Their value is not the number; it is the range of deliberately hostile conditions around the contract boundary.
 
 The tests reject invalid JSONL, array arguments, duplicate call IDs, output after `final`, a final event racing an asynchronous result, inherited fixture properties, nonzero child exits, and invalid report files. They verify forced termination after ignored graceful shutdown, including POSIX process-group descendants, and preserve exit `3` when an observed critical violation is followed by a crash. Scenario tests cover inline, file, argument-aware, and call-index-aware fixtures; reject duplicate or unreachable selectors and contradictory policies; validate Draft 2020-12 schemas; and reject reserved redaction keys that would corrupt policy or event structure.
 
-Evaluator tests prove required and forbidden actions, structured outcome matching, one-use confirmation, and exact argument binding. Process and E2E tests prove denied calls never reach fixture or MCP dispatch and leave requested/denied evidence without a result. MCP tests exercise a real stdio server, compare fixture and live action sequences, enforce startup and request deadlines, detect input-schema drift, latency regression, and oversized responses, preserve application and protocol failure evidence, and decode structured and mixed content without dropping block annotations or top-level metadata. Conformance tests restrict order-insensitive arrays to schema paths, keep capability and `_meta` arrays ordered, reject duplicate tool names, and retain `execution` and `_meta` during discovery normalization. Redaction tests cover nested values, JSON text, diagnostics, schema property-name preservation, composed-schema instance keywords, ordinary and schema-lookalike instance data, discovery-shaped spoofing, split command flags, final output, and stderr. Reporter tests verify that both human-readable finding lines and GitHub annotations prevent multiline workflow-command injection, including carriage return, line feed, and percent handling. CLI tests execute the general `mcp inspect` path and generate a reusable snapshot through the same deadline-bounded production proxy used by scenario runs.
+Evaluator tests prove required and forbidden actions, structured outcome matching, one-use confirmation, and exact argument binding. Process and E2E tests prove denied calls never reach fixture, MCP, or custom backend dispatch and leave requested/denied evidence without a result. Extension tests cover package-root imports, immutable factory context, backend selection, startup-evidence isolation, structural-safe redaction, and setup, call, or cleanup failures. MCP tests exercise a real stdio server, compare fixture and live action sequences, enforce startup and request deadlines, detect input-schema drift, latency regression, and oversized responses, preserve application and protocol failure evidence, and decode structured and mixed content without dropping block annotations or top-level metadata. Conformance tests restrict order-insensitive arrays to schema paths, keep capability and `_meta` arrays ordered, reject duplicate tool names, and retain `execution` and `_meta` during discovery normalization. Redaction tests cover nested values, JSON text, diagnostics, schema property-name preservation, composed-schema instance keywords, ordinary and schema-lookalike instance data, discovery-shaped spoofing, split command flags, final output, and stderr. Reporter tests verify that both human-readable finding lines and GitHub annotations prevent multiline workflow-command injection, including carriage return, line feed, and percent handling. CLI tests execute the general `mcp inspect` path and generate a reusable snapshot through the same deadline-bounded production proxy used by scenario runs.
 
 Together, these tests demonstrate that this implementation's observable protocol and policies behave consistently under those cases. They do not demonstrate that arbitrary agents are correct, that every MCP server is conformant, that redaction is complete, or that a local deterministic server predicts production reliability. A passing suite is evidence about a defined boundary, not a certification of intelligence or safety.
 
 ## Validate Product Fit in Pull Requests, Not Demo Metrics
 
-Technical feasibility is not product-market fit. Agent Doctor's current evidence establishes technical feasibility for one local MCP contract; PMF remains unvalidated. A polished demo, seeded regression, download count, or GitHub star can show interest without showing that external teams have a recurring problem worth changing their workflow to solve.
+Technical feasibility is not product-market fit. Agent Doctor's current evidence establishes technical feasibility across two in-repository reference domains plus fixture, MCP, and custom backend integration paths; PMF remains unvalidated. A polished demo, seeded regression, download count, or GitHub star can show interest without showing that external teams have a recurring problem worth changing their workflow to solve.
 
 The repository's PMF plan proposes a stricter test: recruit teams that recently experienced a real tool-selection, argument, confirmation, or schema failure; encode one mutating workflow and one sanitized incident; add a non-blocking check for ten pull requests; seed one known regression; then observe false blocks, maintenance effort, independent scenario ownership, and unseeded catches.
 
@@ -300,6 +357,8 @@ The strongest signal is retention. Do teams keep the check after the pilot, main
 - Require unique call IDs and reject premature actions from synchronous arrival state.
 - Scope confirmation to one named tool and consume it after one call.
 - Run deterministic fixtures for planner behavior and real MCP for protocol behavior.
+- Use `ToolBackendFactory` for non-MCP service boundaries while keeping the
+  scenario contract and deterministic verdict semantics unchanged.
 - Snapshot negotiated capabilities plus complete tool titles, descriptions, icons, input schemas, output schemas, annotations, execution metadata, and `_meta`.
 - Apply order-insensitive array canonicalization only inside schemas; preserve array order in capabilities and arbitrary tool metadata.
 - Compare and evaluate unredacted discovery evidence, then redact the complete report at the explicit persistence boundary.
@@ -327,6 +386,6 @@ The strongest signal is retention. Do teams keep the check after the pilot, main
 
 Reliable agent engineering starts by changing what is treated as the testable product. The final response matters, but so do the selected capabilities, argument shapes, observation sequence, confirmation boundaries, protocol contract, payload budgets, and failure evidence that produced it.
 
-MCP provides a standard boundary at which much of that behavior becomes observable. Contract tests turn the boundary into an executable agreement. Deterministic replay makes planner regressions cheap to reproduce; live stdio tests expose integration failures; redaction and partial evidence make reports safer and more useful; stable exit codes make the result operational in CI.
+MCP provides a standard boundary at which much of that behavior becomes observable, while custom backends cover service boundaries that do not speak MCP. Contract tests turn either boundary into an executable agreement. Deterministic replay makes planner regressions cheap to reproduce; live stdio tests expose integration failures; programmatic backends extend dispatch without extending verdicts; redaction and partial evidence make reports safer and more useful; stable exit codes make the result operational in CI.
 
 None of this eliminates nondeterminism or proves an agent safe. It does something more modest and immediately useful: it replaces confidence based on plausible text with reviewable evidence about what the system actually did.

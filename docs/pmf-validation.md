@@ -14,12 +14,15 @@ The current release proves that one local contract can:
 - reject contradictory policies and unreachable fixture cases before execution;
 - record requested, authorized, denied, dispatched, and completed lifecycle
   evidence;
-- deny configured forbidden or unconfirmed fixture and MCP calls before harness
-  dispatch;
+- deny configured forbidden or unconfirmed fixture, MCP, and custom backend
+  calls before harness dispatch;
 - preserve partial evidence and return stable CI exit codes;
-- sanitize configured sensitive values before report persistence.
+- sanitize configured sensitive values before report persistence;
+- embed typed contract runs through the package-root `runAgentDoctor` API;
+- route authorized calls through `ToolBackendFactory` to HTTP, gRPC,
+  in-process, or other custom transports without changing verdict semantics.
 
-AgentDr itself currently has 285 tests across 25 files. Those results prove
+AgentDr itself currently has 297 tests across 28 files. Those results prove
 implementation quality. They do not prove that external teams have a recurring
 problem, can onboard independently, will retain scenarios, or will pay.
 
@@ -83,8 +86,8 @@ mutants and initially dropped the score to 89.6%, exposing 4 genuine defects.
 The single surviving mutant is `swap-arg:7:summary`, a free-text prose summary
 field.
 
-Separately, the seeded-fault suite catches 10 of 10 seeded faults and keeps 2
-correct-behaviour baselines passing.
+Separately, the seeded end-to-end suite covers 8 fault-detection and 3 baseline
+runs.
 
 On this workload, the PMF trade-off has moved: deterministic recall and
 precision are credible together, but only inside the measured boundary. Removing
@@ -132,8 +135,9 @@ contract:
 | Post-run confirmation finding | Optional exact argument binding and pre-dispatch denial | Teams can test both detection and bounded prevention |
 | Tool call plus result evidence | Explicit request-to-completion lifecycle | Reviewers can distinguish attempted, denied, and dispatched actions |
 | Schema validation only | Core semantic linting | Contradictory or unreachable scenarios fail before consuming CI time |
-| MCP-focused positioning | Fixture and MCP paths share one evaluator and report | Teams can adopt cheaply, then add real transport coverage |
+| MCP-focused positioning | Fixture, MCP, and custom backend paths share one evaluator and report | Teams can change dispatch transports without changing contracts or verdict semantics |
 | One run judged independently | `--repeat N` compares report shape across identical runs | Run-dependent report paths become visible before they become review noise |
+| CLI-only invocation | `runAgentDoctor` and `ToolBackendFactory` expose a typed package API | Teams can embed contract runs and custom dispatch without a CLI subprocess |
 
 The PMF question is no longer only whether teams want MCP conformance checks. It
 is whether they will maintain deterministic action contracts as normal release
@@ -188,11 +192,13 @@ These boundaries may be acceptable, or they may block adoption:
 - MCP calls are made by the harness proxy and do not test the child agent's
   native MCP client implementation;
 - scenarios and their commands are trusted local code;
-- the current topology is one adapter, one MCP server, and sequential calls;
+- the current topology is one child adapter, one selected backend at a time
+  (fixture, MCP, or custom factory), and sequential calls;
 - the published measurement still covers one contract, one reference agent, and
   one task; generalisation remains an open validity threat;
-- retrieval grounding, citations, multi-turn sessions, HTTP, concurrency, and
-  production trace ingestion are not implemented;
+- retrieval grounding, citations, multi-turn sessions, native MCP Streamable
+  HTTP transport, concurrency, and production trace ingestion are not
+  implemented;
 - configured key-based redaction is not general data-loss prevention.
 
 Do not hide these constraints during discovery. Measure which ones prevent a

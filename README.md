@@ -131,17 +131,17 @@ npm run record:stability
 Agent Doctor has two operating modes over the same JSONL adapter contract.
 **Observe mode** records protocol-mediated activity and evaluates it after it
 occurs. **Enforcement mode** adds a fail-closed authorization check before
-fixture or MCP dispatch.
+fixture, MCP, or custom backend dispatch.
 
-![Architecture decision flow showing observe and enforcement modes, harness-mediated fixture and MCP backends, lifecycle evidence, deterministic evaluation, redacted reports, and an uncontrolled out-of-band path](docs/assets/agentdoctor-architecture.png)
+![Architecture decision flow showing observe and enforcement modes, harness-mediated fixture, MCP, and custom backends, lifecycle evidence, deterministic evaluation, redacted reports, and an uncontrolled out-of-band path](docs/assets/agentdoctor-architecture.png)
 
 [Open the full-size architecture diagram](docs/assets/agentdoctor-architecture.png)
 
 **For architects:** the blue boundary is the enforceable invocation surface.
 Lifecycle evidence distinguishes `requested`, `authorized` or `denied`,
-`dispatched`, and `completed`. Fixture and MCP paths share evaluation and
-reporting; MCP adds discovery, transport, error, latency, and result-size
-evidence.
+`dispatched`, and `completed`. Fixture, MCP, and custom backend paths share
+evaluation and reporting; MCP adds discovery, transport, error, latency, and
+result-size evidence.
 
 **For product and safety leaders:** a `denied` request represents prevented
 backend dispatch. A finding after `dispatched` represents detected risk, not
@@ -153,7 +153,7 @@ another policy boundary.
 | Decision | Why it matters |
 |---|---|
 | Deterministic checks are primary | Findings are explainable and repeatable in CI |
-| Fixture and MCP paths share evidence | Teams can move from cheap replay to real transport without changing contracts |
+| Fixture, MCP, and custom paths share evidence | Teams can change dispatch transports without changing contracts or verdict semantics |
 | Enforcement is explicit and optional | Adoption can start in observe mode and add selective fail-closed gates |
 | Confirmation can bind exact arguments | Approval for one call cannot structurally authorize changed arguments |
 | Denial is a lifecycle state | Reports distinguish an attempted call from a dispatched side effect |
@@ -197,8 +197,8 @@ belongs in a complementary evaluation system.
    sanitized inline or file fixtures.
 2. **Add an observe-mode pull-request check.** Validate tool choice, arguments,
    order, outcome, budgets, and confirmation evidence without changing dispatch.
-3. **Exercise a real MCP server.** Add discovery, snapshots, schema drift,
-   latency, error, and response-size checks.
+3. **Exercise a real backend.** Use MCP for discovery and conformance coverage,
+   or a `ToolBackendFactory` for HTTP, gRPC, or in-process dispatch.
 4. **Enable selective enforcement.** Set `enforcement.preDispatch` for configured
    forbidden or confirmation-protected harness calls.
 5. **Version the evidence contract.** Review scenario changes beside agent and
@@ -234,7 +234,7 @@ protocol.
 |---|---|---|
 | Agent Doctor → adapter | `run_start` | Supplies the scenario `input`. |
 | Adapter → Agent Doctor | `tool_call` | Requests one named tool with a unique `callId` and object arguments. |
-| Agent Doctor → adapter | `tool_result` | Returns the matching fixture or MCP result after an authorized dispatch. |
+| Agent Doctor → adapter | `tool_result` | Returns the fixture, MCP, or custom backend result after an authorized dispatch. |
 | Adapter → Agent Doctor | `confirmation` | Attests that confirmation occurred for one named tool and, optionally, exact arguments. |
 | Adapter → Agent Doctor | `final` | Ends the run with a status and optional structured output. |
 
@@ -255,10 +255,10 @@ as required by the host system. See the
 [technical protocol reference](docs/technical-reference.md#execution-model).
 
 When `enforcement.preDispatch` is enabled, Agent Doctor checks configured
-forbidden-tool and confirmation policies before fixture or MCP dispatch. Denied
-protocol-mediated requests produce `requested` and `denied` lifecycle evidence,
-never `dispatched`, `completed`, or `tool_result` evidence. This gate does not
-control side effects performed outside the JSONL/MCP harness.
+forbidden-tool and confirmation policies before fixture, MCP, or custom backend
+dispatch. Denied protocol-mediated requests produce `requested` and `denied`
+lifecycle evidence, never `dispatched`, `completed`, or `tool_result` evidence.
+This gate does not control side effects performed outside the harness.
 
 ## A contract is simple YAML
 
@@ -425,13 +425,13 @@ import {
   type ToolBackendFactory
 } from "agentdoctor";
 
-const backendFactory: ToolBackendFactory = () => {
+const backendFactory: ToolBackendFactory = ({ cwd }) => {
   const redaction = { keys: ["accessToken"] };
   const redact = createRedactor(redaction);
   return {
     redaction,
     async start(timeoutMs) {
-      await service.connect({ timeoutMs });
+      await service.connect({ cwd, timeoutMs });
       return [];
     },
     async call(tool, argumentsValue) {
@@ -509,8 +509,9 @@ Configured MCP or custom backend redaction is applied at the report boundary.
 That redaction is not general DLP, so use sanitized test data and review reports
 before sharing them.
 
-Scenario files and their adapter or MCP commands are trusted code. Run scenarios
-from untrusted sources only inside an appropriately isolated environment.
+Scenario files, adapter or MCP commands, and custom backend factories are trusted
+code. Run them from untrusted sources only inside an appropriately isolated
+environment.
 
 ## How well does it actually catch things
 
