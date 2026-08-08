@@ -53,10 +53,6 @@ adapter-requested calls through `tools/call`, and saves ordered evidence.
 
 ![Agent Doctor runs and inspects a passing MCP workflow](docs/assets/mcp-pass.gif)
 
-[CLI inspect output](docs/assets/mcp-pass.inspect.txt) ·
-[Normalized JSON report](docs/assets/mcp-pass.report.json) ·
-[Animation summary](docs/assets/mcp-pass.summary.txt) ·
-[Static final frame](docs/assets/mcp-pass.png)
 
 ### An enforced unsafe request never reaches the fixture
 
@@ -77,10 +73,6 @@ call and returns critical exit code `3`.
 
 ![Agent Doctor detects an unconfirmed fixture-backed call and fails the run](docs/assets/safety-failure.gif)
 
-[CLI inspect output](docs/assets/safety-failure.inspect.txt) ·
-[Normalized JSON report](docs/assets/safety-failure.report.json) ·
-[Animation summary](docs/assets/safety-failure.summary.txt) ·
-[Static final frame](docs/assets/safety-failure.png)
 
 ### A scoped expectation catches what an unscoped contract misses
 
@@ -97,11 +89,6 @@ fails the same run at evidence `#16`, and passes once the agent is fixed.
 npm run record:scope
 ```
 
-[Animation summary](docs/assets/scoped-catch.summary.txt) ·
-[Unscoped pass report](docs/assets/scoped-catch-unscoped.report.json) ·
-[Scoped failure report](docs/assets/scoped-catch-scoped-failure.report.json) ·
-[Fixed pass report](docs/assets/scoped-catch-fixed.report.json) ·
-[Static final frame](docs/assets/scoped-catch.png)
 
 ### Every run passes and the set still fails
 
@@ -122,9 +109,6 @@ the owner as `routed[].owner` then `routed[].assignedTo`.
 npm run record:stability
 ```
 
-[Animation summary](docs/assets/shape-stability.summary.txt) ·
-[Recorded beats](docs/assets/shape-stability.media.json) ·
-[Static final frame](docs/assets/shape-stability.png)
 
 ## Where Agent Doctor detects and where it prevents
 
