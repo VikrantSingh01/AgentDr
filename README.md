@@ -325,8 +325,9 @@ See the [fixture contract](examples/agentic-release-contract.yml),
 - missing/duplicate tools, errors, timeouts, latency, and result-size budgets;
 - configured report redaction and partial failure evidence.
 
-The repository has **297 deterministic tests across 28 files** and **eight live
-MCP test cases**. There is no model judge or hidden-reasoning assertion.
+The repository has **297 deterministic tests across 28 files**, including
+**eight live MCP end-to-end cases** plus **six MCP server and proxy tests**.
+There is no model judge or hidden-reasoning assertion.
 
 ## Exit codes
 
