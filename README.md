@@ -463,6 +463,47 @@ npm run expense:measure          # the real contract and the corpus together
 The two runs write reports named after their contracts, so the control cannot
 overwrite the published real-contract report.
 
+### What a first contract catches on an agent it was not designed for
+
+Both numbers above come from agents whose contracts were iterated against their
+own mutation corpus. The more useful question for anyone adopting this is what
+one contract catches on day one, on an agent that already exists and was never
+built with Agent Doctor in mind.
+
+That was measured on a third agent — an Azure DevOps triage agent with 46 source
+files and a pre-existing suite of 168 tests, written before Agent Doctor existed
+and by a different design process. One 115-line contract was added. **No
+production code was changed**, because the agent already took its ports by
+injection. Thirteen realistic single-line defects were then injected into its
+source, and the same defective build was shown to both detectors.
+
+| | Result |
+| --- | --- |
+| Scorable defects | 9 of 13 (4 changed no observable behaviour, 0 failed to compile) |
+| Caught by the agent's own 168 tests | 7 of 9 |
+| Caught by one first-draft contract | 5 of 9 |
+| Caught by the two together | **8 of 9** |
+| Negative control, assertions stripped | **0 of 9** |
+| False positives across behaviour-preserving refactors | **0 of 6** |
+
+Three findings matter more than the headline:
+
+- **One defect escaped all 168 tests.** Flipping `includeComments` to `false` on
+  the analysis read left every test green while the agent reasoned over strictly
+  less evidence than it was designed to use. The contract caught it because it
+  asserts on the call, not on the returned object.
+- **The existing tests won on three defects, all of them removed guards.** On a
+  world where nothing drifts and the right principal approves, a deleted guard
+  changes nothing the agent *does*, so there is no trace to object to. That is a
+  structural limit of trace-based checking, not a tuning problem.
+- **A first contract catches roughly half, not 98%.** The gap between 5 of 9 here
+  and 98% on the iterated domains is the cost of iteration, stated plainly rather
+  than averaged away.
+
+The two detectors are complementary rather than competing: unit tests are strong
+on guards and internal state, contracts are strong on what actually crossed the
+boundary. Neither subsumes the other, and 8 of 9 is what using both produced.
+
 ## Current boundaries
 
 - local console and JSON reports, not hosted observability;

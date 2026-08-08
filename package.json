@@ -27,7 +27,13 @@
     "dist",
     "schema",
     "examples",
-    "docs",
+    "!examples/expense-steward/corpus-report.json",
+    "!examples/expense-steward/mutation-report*.json",
+    "docs/assets",
+    "docs/agentic-ai-developer-guide.md",
+    "docs/architecture-review.md",
+    "docs/pmf-validation.md",
+    "docs/technical-reference.md",
     "scripts"
   ],
   "scripts": {
