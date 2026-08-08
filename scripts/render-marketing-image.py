@@ -314,7 +314,7 @@ def render_overview():
         (434, 632, 794, 812),
         "ADVERSARIAL MEASUREMENT",
         "98.1% / 98.3%",
-        "em-triage / expense steward\n52 + 59 mutants killed.\nOne survivor in each domain.",
+        "em-triage / expense steward, each\niterated against its own corpus.\nFirst contract, agent built earlier: 56%.",
         BLUE,
         TITLE,
     )
@@ -338,7 +338,7 @@ def render_overview():
     write(
         draw,
         (54, 870),
-        "Hybrid note: the planned local SLM sidecar is advisory only; the deterministic core remains the CI authority.",
+        "Hybrid note: the local SLM sidecar is planned, not shipped; this build makes no model calls.",
         SMALL,
         AMBER,
     )

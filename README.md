@@ -87,8 +87,8 @@ call and returns critical exit code `3`.
 An agent looks up an owner per bug, then assigns each bug. On the second bug it
 reuses the first lookup's owner. Both contracts require the same tools, the same
 order, and the same argument fields, so an unscoped contract passes the buggy
-agent with exit `0`. Scoping the expectation to a specific call — `callIndex`
-plus a `$fromResult` reference that resolves against *that* call's lookup —
+agent with exit `0`. Scoping the expectation to a specific call, using `callIndex`
+plus a `$fromResult` reference that resolves against *that* call's lookup,
 fails the same run at evidence `#16`, and passes once the agent is fixed.
 
 ![An unscoped contract passes a buggy agent while a call-scoped contract fails it](docs/assets/scoped-catch.gif)
@@ -107,7 +107,7 @@ npm run record:scope
 
 A contract judges one run at a time, which makes a whole defect class invisible:
 a report whose *shape* depends on the run. Here the agent makes the same calls
-against the same fixtures and reports the same facts three times over — only the
+against the same fixtures and reports the same facts three times over, and only the
 key names move, so all three runs pass on their own. `--repeat 3` compares them
 and fails with exit `1`.
 
@@ -387,7 +387,7 @@ was never given.
 
 `--repeat N` runs the same contract N times and compares the shape of the final
 report across them. A contract judges one run at a time, so a report whose shape
-depends on the run is invisible to it — three Copilot runs on an identical prompt
+depends on the run is invisible to it. Three Copilot runs on an identical prompt
 produced 23 paths that appeared in some runs and not others, each report
 internally coherent. Every run keeps its own verdict and the worst exit code
 wins; instability alone raises the exit code to 1.
@@ -596,7 +596,7 @@ own mutation corpus. The more useful question for anyone adopting this is what
 one contract catches on day one, on an agent that already exists and was never
 built with Agent Doctor in mind.
 
-That was measured on a third agent — an Azure DevOps triage agent with 46 source
+That was measured on a third agent, an Azure DevOps triage agent with 46 source
 files and a pre-existing suite of 168 tests, written before Agent Doctor existed
 and by a different design process. One 115-line contract was added. **No
 production code was changed**, because the agent already took its ports by
@@ -618,7 +618,7 @@ Three findings matter more than the headline:
   `includeComments` to `false` on the analysis read left every test green while
   the agent reasoned over strictly less evidence than it was designed to use.
   Re-running the mutant and the original over the same fixture produced a
-  byte-identical decision — same disposition, same field, same assignee — so no
+  byte-identical decision, same disposition, same field, same assignee, so no
   output-based assertion could have separated them. The contract caught it
   because it asserts on the call, not on the returned object. This is the shape
   of regression that matters most here: a capability is silently lost while
