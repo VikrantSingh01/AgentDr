@@ -587,10 +587,16 @@ source, and the same defective build was shown to both detectors.
 
 Three findings matter more than the headline:
 
-- **One defect escaped all 168 tests.** Flipping `includeComments` to `false` on
-  the analysis read left every test green while the agent reasoned over strictly
-  less evidence than it was designed to use. The contract caught it because it
-  asserts on the call, not on the returned object.
+- **One defect escaped all 168 tests, and produced identical output.** Flipping
+  `includeComments` to `false` on the analysis read left every test green while
+  the agent reasoned over strictly less evidence than it was designed to use.
+  Re-running the mutant and the original over the same fixture produced a
+  byte-identical decision — same disposition, same field, same assignee — so no
+  output-based assertion could have separated them. The contract caught it
+  because it asserts on the call, not on the returned object. This is the shape
+  of regression that matters most here: a capability is silently lost while
+  every observable result stays correct, until an input arrives where the
+  missing evidence would have changed the answer.
 - **The existing tests won on three defects, all of them removed guards.** On a
   world where nothing drifts and the right principal approves, a deleted guard
   changes nothing the agent *does*, so there is no trace to object to. That is a
