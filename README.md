@@ -133,9 +133,31 @@ Agent Doctor has two operating modes over the same JSONL adapter contract.
 occurs. **Enforcement mode** adds a fail-closed authorization check before
 fixture, MCP, or custom backend dispatch.
 
-![Architecture decision flow showing observe and enforcement modes, harness-mediated fixture, MCP, and custom backends, lifecycle evidence, deterministic evaluation, redacted reports, and an uncontrolled out-of-band path](docs/assets/agentdoctor-architecture.png)
+![Architecture decision flow showing observe and enforcement modes, harness-mediated fixture, MCP, and custom backends, lifecycle evidence, deterministic evaluation, redacted reports, an uncontrolled out-of-band path, and the planned-but-unshipped local SLM sidecar](docs/assets/agentdoctor-architecture.png)
 
 [Open the full-size architecture diagram](docs/assets/agentdoctor-architecture.png)
+
+**What "hybrid" means in that diagram, and what ships today.** The diagram shows
+a split of authority, not a split of work. The deterministic evaluator is the
+only layer that sets the exit code. The local SLM sidecar is **designed, not
+shipped**: it is drawn dashed, it receives a read-only copy of recorded evidence,
+and it has no arrow to the verdict. The build in this repository contains no
+model integration and makes no model calls. You can confirm both in about a
+minute:
+
+```bash
+# no model or inference code
+grep -ri "slm\|llm\|openai\|anthropic\|inference\|adjudicat" src/
+
+# no outbound network; MCP uses stdio transport only
+grep -rn "node:http\|fetch(\|axios\|undici" src/
+```
+
+Both return nothing. Runtime dependencies are `ajv`, `yaml`, `zod`, and the MCP
+stdio client and server. If the sidecar ever ships, the containment rules are
+fixed in advance: advisory by default, local only, grounded on recorded
+evidence, opt-in per assertion, and never able to suppress or downgrade a
+deterministic finding.
 
 **For architects:** the blue boundary is the enforceable invocation surface.
 Lifecycle evidence distinguishes `requested`, `authorized` or `denied`,
@@ -160,6 +182,10 @@ another policy boundary.
 | Redaction happens before persistence | Raw evidence drives evaluation; configured sensitive values are sanitized before reports are written |
 
 ## One action contract across SLM, frontier, and hybrid agents
+
+This section is about **hybrid agents you test**, which is different from the
+hybrid architecture of Agent Doctor itself described above. Testing hybrid
+agents works today. The SLM sidecar inside Agent Doctor does not exist yet.
 
 Agent Doctor evaluates observable actions rather than hidden model reasoning.
 That makes the same scenario reusable when a team changes its model, prompt,
@@ -621,7 +647,8 @@ boundary. Neither subsumes the other, and 8 of 9 is what using both produced.
   harness-validated, but user, tenant, issuance, and expiry are not authenticated;
 - MCP calls are made by Agent Doctor's harness proxy after JSONL requests, so
   this path does not exercise a child agent's own native MCP client stack;
-- one child adapter, one local MCP stdio server, and sequential calls;
+- one child adapter, one selected fixture, MCP, or custom backend at a time, and
+  sequential calls;
 - structural checks, not chain-of-thought inspection or automatic truth judging;
 - model-independent action checks, not automatic observation of an internal
   model router, device boundary, or model-quality ranking;
@@ -633,8 +660,8 @@ boundary. Neither subsumes the other, and 8 of 9 is what using both produced.
   earlier tool results with `$fromResult`, including joins on a producing call's
   arguments or results, but they cannot express an aggregate over a reported
   collection such as a reported total matching the sum of its parts;
-- no tamper-evident provenance, HTTP, Microsoft Agents 365, or External Agents
-  adapter yet.
+- no tamper-evident provenance, MCP Streamable HTTP transport, Microsoft Agents
+  365 host adapter, or External Agents adapter yet.
 
 The live demo uses real MCP transport with deterministic local data, not
 production APIs or network conditions.
