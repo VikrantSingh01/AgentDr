@@ -617,8 +617,8 @@ def render_architecture():
     draw_header(
         draw,
         width,
-        "Hybrid architecture: deterministic core + local SLM sidecar.",
-        "The core decides the exit code; the planned SLM path can only advise from recorded evidence.",
+        "Hybrid by design: deterministic core, SLM sidecar planned.",
+        "Only the core sets the exit code. The sidecar is not implemented in this build.",
         [
             ("DETERMINISTIC CORE", BLUE, WHITE),
             ("SLM SIDECAR PLANNED", AMBER, WHITE),
